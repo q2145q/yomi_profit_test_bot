@@ -6,10 +6,11 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start
+from handlers import start, projects
 
 # Настройка логирования
 logging.basicConfig(
@@ -25,11 +26,12 @@ async def main():
     # Создание бота
     bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
     
-    # Создание диспетчера
-    dp = Dispatcher()
+    # Создание диспетчера с хранилищем для FSM
+    dp = Dispatcher(storage=MemoryStorage())
     
     # Подключение роутеров
     dp.include_router(start.router)
+    dp.include_router(projects.router)
     
     # Запуск бота
     logging.info("Бот запущен!")
