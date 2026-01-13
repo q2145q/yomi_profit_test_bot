@@ -1,0 +1,209 @@
+"""
+Обработчики для работы со сменами
+"""
+from aiogram import Router, F
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from datetime import datetime
+import json
+from database import get_active_project, get_user, create_shift, confirm_shift
+from parser import parse_shift_message
+
+router = Router()
+
+# Временное хранилище распарсенных смен (в памяти)
+# TODO: В будущем использовать Redis или FSM storage
+pending_shifts = {}
+
+@router.message(F.text & ~F.text.startswith("/"))
+async def handle_text_message(message: Message):
+    """Обработка текстовых сообщений как потенциальных смен"""
+    user = await get_user(message.from_user.id)
+    
+    if user is None:
+        await message.answer("Сначала отправьте /start")
+        return
+    
+    # Проверяем наличие активного проекта
+    project = await get_active_project(message.from_user.id)
+    
+    if project is None:
+        await message.answer(
+            "У вас нет активных проектов.\n"
+            "Создайте проект командой /new_project"
+        )
+        return
+    
+    # Показываем процесс обработки
+    processing_msg = await message.answer("⏳ Обрабатываю...")
+    
+    # Получаем текущие дату и время
+    now = datetime.now()
+    current_date = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
+    
+    # Парсим сообщение
+    result = await parse_shift_message(
+        message=message.text,
+        current_date=current_date,
+        current_time=current_time,
+        base_hours=12,  # TODO: Брать из настроек проекта
+        services=["обед", "ронин", "текущий обед"]  # TODO: Брать из БД
+    )
+    
+    # Удаляем сообщение о процессе
+    await processing_msg.delete()
+    
+    # Проверяем результат
+    if result.get("confidence", 0) < 0.4:
+        # Формируем сообщение об ошибке
+        error_text = "🤔 Не смог распознать данные смены.\n\n"
+        
+        if result.get("error"):
+            error_text += f"Причина: {result['error']}\n\n"
+        
+        if result.get("missing_fields"):
+            missing = ", ".join(result["missing_fields"])
+            error_text += f"⚠️ Не хватает данных: {missing}\n\n"
+        
+        error_text += "Попробуйте написать так:\n\"Вчера работал с 07:00 до 19:00\""
+        
+        await message.answer(error_text)
+        return
+    
+    # Проверяем обязательные поля
+    if not result.get("start_time") or not result.get("end_time"):
+        missing = []
+        if not result.get("start_time"):
+            missing.append("время начала")
+        if not result.get("end_time"):
+            missing.append("время окончания")
+        
+        await message.answer(
+            f"⚠️ Не хватает данных: {', '.join(missing)}\n\n"
+            f"Пожалуйста, уточните."
+        )
+        return
+    
+    # Формируем карточку для подтверждения
+    date_obj = datetime.strptime(result["date"], "%Y-%m-%d")
+    date_str = date_obj.strftime("%d.%m.%Y")
+    
+    # Определяем относительную дату
+    today = datetime.now().date()
+    shift_date = date_obj.date()
+    
+    if shift_date == today:
+        date_label = "сегодня"
+    elif shift_date == today.replace(day=today.day - 1):
+        date_label = "вчера"
+    elif shift_date == today.replace(day=today.day - 2):
+        date_label = "позавчера"
+    else:
+        date_label = date_str
+    
+    # Вычисляем продолжительность смены
+    start = datetime.strptime(result["start_time"], "%H:%M")
+    end = datetime.strptime(result["end_time"], "%H:%M")
+    
+    # Если окончание раньше начала - значит переход через полночь
+    if end < start:
+        end = end.replace(day=end.day + 1)
+    
+    total_hours = (end - start).total_seconds() / 3600
+    
+    text = f"""📋 Проверьте данные смены:
+
+📅 Дата: {date_str} ({date_label})
+🕐 Начало: {result['start_time']}
+🕔 Конец: {result['end_time']}
+⏱ Часов: {total_hours:.1f} ч
+
+📁 Проект: {project['name']}
+"""
+    
+    if result.get("services"):
+        text += "\n✅ Дополнительные услуги:\n"
+        for service in result["services"]:
+            text += f"   • {service}\n"
+    
+    # Кнопки
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_shift"),
+            InlineKeyboardButton(text="✏️ Изменить", callback_data="edit_shift")
+        ],
+        [
+            InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_shift")
+        ]
+    ])
+    
+    # Сохраняем распарсенные данные
+    pending_shifts[message.from_user.id] = {
+        "result": result,
+        "project_id": project["id"],
+        "original_message": message.text,
+        "total_hours": total_hours
+    }
+    
+    await message.answer(text, reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "confirm_shift")
+async def confirm_shift_callback(callback: CallbackQuery):
+    """Подтверждение смены"""
+    if callback.from_user.id not in pending_shifts:
+        await callback.answer("Данные смены не найдены", show_alert=True)
+        return
+    
+    data = pending_shifts[callback.from_user.id]
+    result = data["result"]
+    
+    # Создаём смену в БД
+    shift_id = await create_shift(
+        project_id=data["project_id"],
+        date=result["date"],
+        start_time=result["start_time"],
+        end_time=result["end_time"],
+        total_hours=data["total_hours"],
+        original_message=data["original_message"],
+        parsed_data=json.dumps(result, ensure_ascii=False)
+    )
+    
+    # Подтверждаем смену
+    await confirm_shift(shift_id)
+    
+    # Удаляем из временного хранилища
+    del pending_shifts[callback.from_user.id]
+    
+    # Формируем итоговое сообщение
+    date_obj = datetime.strptime(result["date"], "%Y-%m-%d")
+    date_str = date_obj.strftime("%d.%m.%Y")
+    
+    text = f"""✅ Смена #{shift_id} подтверждена!
+
+📅 Дата: {date_str}
+⏱ Часов: {data['total_hours']:.1f} ч
+
+(Расчёт заработка будет добавлен в следующей фазе)"""
+    
+    await callback.message.edit_text(text)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "edit_shift")
+async def edit_shift_callback(callback: CallbackQuery):
+    """Изменение смены (пока заглушка)"""
+    await callback.answer(
+        "Функция редактирования будет добавлена позже через Mini App",
+        show_alert=True
+    )
+
+
+@router.callback_query(F.data == "cancel_shift")
+async def cancel_shift_callback(callback: CallbackQuery):
+    """Отмена смены"""
+    if callback.from_user.id in pending_shifts:
+        del pending_shifts[callback.from_user.id]
+    
+    await callback.message.edit_text("❌ Смена отменена")
+    await callback.answer()

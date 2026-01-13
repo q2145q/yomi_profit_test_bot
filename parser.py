@@ -9,6 +9,35 @@ from datetime import datetime
 
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
+def find_matching_services(text: str, available_services: list) -> list:
+    """
+    Умный поиск услуг в тексте
+    Ищет как полные, так и частичные совпадения
+    
+    Args:
+        text: Текст для поиска
+        available_services: Список доступных услуг
+    
+    Returns:
+        Список найденных услуг
+    """
+    text_lower = text.lower()
+    found_services = []
+    
+    for service in available_services:
+        service_lower = service.lower()
+        
+        # Точное совпадение
+        if service_lower in text_lower:
+            found_services.append(service)
+        # Частичное совпадение (каждое слово)
+        else:
+            words = service_lower.split()
+            if any(word in text_lower for word in words if len(word) > 3):
+                found_services.append(service)
+    
+    return found_services
+
 async def parse_shift_message(
     message: str,
     current_date: str,
@@ -33,7 +62,7 @@ async def parse_shift_message(
         services = []
     
     # Формируем промпт для OpenAI
-    prompt = f"""Ты — парсер сообщений для учёта рабочих смен.
+    prompt = f"""Ты — парсер сообщений для учёта рабочих смен. Люди пишут в вольной форме.
 
 Контекст:
 - Текущая дата: {current_date}
@@ -54,25 +83,44 @@ async def parse_shift_message(
   "missing_fields": []
 }}
 
-КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА:
-1. Если дата не указана - используй текущую дату
-2. "вчера" = текущая дата - 1 день
-3. "позавчера" = текущая дата - 2 дня
-4. Время в формате 24 часа (HH:MM)
+ПРАВИЛА ПАРСИНГА:
 
-5. ЛОГИКА ВРЕМЕНИ:
-   - Если смена "сегодня" ({current_date}) и end_time > {current_time} - это ОШИБКА!
-   - Смена не может закончиться в будущем!
+1. ДАТА (будь гибким):
+   - Не указана → текущая дата
+   - "вчера" → текущая дата - 1 день
+   - "позавчера", "поза", "позо" → текущая дата - 2 дня
+   - "11.01" или "11 января" → конкретная дата
+
+2. ВРЕМЯ (понимай разные форматы):
+   - "7" → "07:00"
+   - "23" → "23:00"
+   - "5 утра" → "05:00"
+   - "10 вечера" → "22:00"
+   - "с 7 до 23" → start: "07:00", end: "23:00"
+   - ЕСЛИ указано хоть какое-то время (даже "7" или "утра") - ОБЯЗАТЕЛЬНО распознай!
+
+3. УСЛУГИ (ищи гибко):
+   - Ищи ЧАСТИЧНЫЕ совпадения с доступными услугами
+   - "текущий" может означать "текущий обед" из списка
+   - "обед" может означать любой вариант с "обед"
+   - Если не нашел точное совпадение - попробуй частичное
+
+4. ЛОГИКА ВРЕМЕНИ:
+   - Если смена "сегодня" ({current_date}) и end_time > {current_time} → ОШИБКА
    - В таком случае добавь "end_time" в missing_fields
 
-6. СТРОГОСТЬ:
-   - Если НЕ УВЕРЕН в start_time или end_time - НЕ ПРИДУМЫВАЙ!
-   - Лучше добавь поле в missing_fields, чем угадывай
-   - Если указано только "до вечера" без точного времени - это missing_fields!
-   - confidence ставь 0.3 или ниже, если данных недостаточно
+5. СТРОГОСТЬ (но не слишком):
+   - Если указано ЛЮБОЕ время - парси его, не бойся
+   - missing_fields только если ВООБЩЕ нет информации о времени
+   - "до вечера" без цифр → missing_fields
+   - "с 7 до вечера" → start: "07:00", end: missing
+   - confidence снижай только если реально не понятно (< 0.4)
 
-7. Если не можешь определить поле - добавь его в "missing_fields"
-8. confidence - твоя уверенность в распознавании (0.0-1.0)
+ПРИМЕРЫ УСПЕШНОГО ПАРСИНГА:
+- "Вчера с 7 до 23" → date: вчера, start: "07:00", end: "23:00", confidence: 0.95
+- "Поза с 5 утра до 22" → date: позавчера, start: "05:00", end: "22:00", confidence: 0.95
+- "с 9 до 18 + текущий" → start: "09:00", end: "18:00", services: ["текущий обед"], confidence: 0.9
+- "работал до 20" → end: "20:00", start: missing_fields, confidence: 0.6
 
 Верни ТОЛЬКО JSON, без дополнительного текста."""
     
@@ -100,6 +148,12 @@ async def parse_shift_message(
         # Парсим JSON
         result = json.loads(content)
         
+        # Дополнительная проверка услуг - если AI не нашел, ищем сами
+        if not result.get("services") and services:
+            found_services = find_matching_services(message, services)
+            if found_services:
+                result["services"] = found_services
+        
         # Дополнительная проверка логики времени
         if result.get("date") == current_date and result.get("end_time"):
             # Сравниваем время окончания с текущим временем
@@ -114,7 +168,7 @@ async def parse_shift_message(
                 result["error"] = "Смена не может закончиться в будущем"
         
         # Если confidence слишком низкий - очищаем сомнительные данные
-        if result.get("confidence", 0) < 0.5:
+        if result.get("confidence", 0) < 0.4:
             if result.get("start_time") and "start_time" in result.get("missing_fields", []):
                 result["start_time"] = None
             if result.get("end_time") and "end_time" in result.get("missing_fields", []):

@@ -1,6 +1,6 @@
 """
 Главный файл Telegram бота
-Статус: ✅ Работает базовая версия
+Статус: ✅ Работает базовая версия + AI-парсинг
 """
 import asyncio
 import logging
@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start, projects
+from handlers import start, projects, shifts
 
 # Настройка логирования
 logging.basicConfig(
@@ -32,6 +32,7 @@ async def main():
     # Подключение роутеров
     dp.include_router(start.router)
     dp.include_router(projects.router)
+    dp.include_router(shifts.router)  # Новый роутер для смен
     
     # Запуск бота
     logging.info("Бот запущен!")

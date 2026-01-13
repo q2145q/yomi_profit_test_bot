@@ -1,5 +1,5 @@
 """
-Тест модуля парсинга сообщений
+Тест парсинга - проблемные случаи из реального использования
 """
 import asyncio
 from parser import parse_shift_message
@@ -7,21 +7,22 @@ from datetime import datetime
 import json
 
 async def test():
-    print("🧪 Тест парсинга сообщений\n")
+    print("🧪 Тест проблемных сообщений\n")
     
-    # Текущая дата и время для тестов
+    # Текущие дата и время
     now = datetime.now()
     current_date = now.strftime("%Y-%m-%d")
     current_time = now.strftime("%H:%M")
     print(f"Текущая дата: {current_date}")
     print(f"Текущее время: {current_time}\n")
     
-    # Список тестовых сообщений
+    # Проблемные сообщения из реального использования
     test_messages = [
-        "Смена 07:00 до 23:00 + обед + ронин",
-        "Работал вчера с 9 до 18",
-        "07:00 - 19:00 текущий обед",
-        "Работал до вечера",  # Недостаточно данных
+        "Вчера с 7 до 23 + текущий",
+        "вчера с 7 до 23",
+        "Поза вчера с 5 до 22",
+        "Поза вчера с 5 утра до 22",
+        "с 9 до 18 + текущий",
     ]
     
     # Доступные услуги
@@ -30,7 +31,7 @@ async def test():
     # Тестируем каждое сообщение
     for i, message in enumerate(test_messages, 1):
         print(f"Тест {i}: '{message}'")
-        print("-" * 50)
+        print("-" * 60)
         
         result = await parse_shift_message(
             message=message,
@@ -40,7 +41,25 @@ async def test():
             services=services
         )
         
-        print(json.dumps(result, indent=2, ensure_ascii=False))
-        print("\n")
+        # Показываем ключевые поля
+        print(f"  Дата: {result.get('date')}")
+        print(f"  Начало: {result.get('start_time')}")
+        print(f"  Конец: {result.get('end_time')}")
+        print(f"  Услуги: {result.get('services')}")
+        print(f"  Confidence: {result.get('confidence')}")
+        
+        if result.get('missing_fields'):
+            print(f"  ⚠️ Пропущено: {result.get('missing_fields')}")
+        
+        if result.get('error'):
+            print(f"  ❌ Ошибка: {result.get('error')}")
+        
+        # Решение: парсится или нет?
+        if result.get('confidence', 0) >= 0.4 and result.get('start_time') and result.get('end_time'):
+            print(f"  ✅ ПАРСИТСЯ")
+        else:
+            print(f"  ❌ НЕ ПАРСИТСЯ")
+        
+        print()
 
 asyncio.run(test())
