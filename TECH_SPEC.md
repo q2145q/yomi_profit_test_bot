@@ -764,5 +764,3 @@ total_gross = round(total_net / (1 - tax_percentage / 100))
 ```
 
 ---
-
-**Конец документа**
