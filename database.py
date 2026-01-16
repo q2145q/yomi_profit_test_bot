@@ -32,7 +32,7 @@ async def init_db():
             )
         """)
         
-        # Таблица shifts (НОВАЯ)
+        # Таблица shifts
         await db.execute("""
             CREATE TABLE IF NOT EXISTS shifts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +67,8 @@ async def init_db():
                 tax_percentage REAL DEFAULT 13,
                 payment_schedule TEXT DEFAULT 'monthly',
                 conditions TEXT,
+                overtime_rounding REAL DEFAULT 0,
+                overtime_threshold REAL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (project_id) REFERENCES projects(id)
             )
@@ -85,13 +87,14 @@ async def init_db():
             )
         """)
 
-        # Таблица additional_services
+        # Таблица additional_services (ОБНОВЛЕНО: добавлен tax_percentage)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS additional_services (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 profession_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 cost INTEGER NOT NULL,
+                tax_percentage REAL DEFAULT 13,
                 application_rule TEXT DEFAULT 'on_mention',
                 linked_service_id INTEGER,
                 keywords TEXT,
@@ -294,7 +297,9 @@ async def create_profession(
     base_shift_hours: float = 12,
     break_hours: float = 12,
     payment_schedule: str = 'monthly',
-    conditions: str = ''
+    conditions: str = '',
+    overtime_rounding: float = 0,
+    overtime_threshold: float = 0
 ):
     """
     Создание настроек профессии для проекта
@@ -310,6 +315,8 @@ async def create_profession(
         break_hours: Часы разрыва между сменами
         payment_schedule: График выплат
         conditions: Специальные условия (текст для AI)
+        overtime_rounding: Округление переработки (0.5 = по полчаса, 0 = без округления)
+        overtime_threshold: Порог переработки в часах (0.25 = первые 15 минут не считаются)
     
     Returns:
         ID созданной профессии
@@ -322,12 +329,14 @@ async def create_profession(
             INSERT INTO professions (
                 project_id, position, base_rate_net, base_rate_gross,
                 tax_percentage, base_overtime_rate, daily_allowance,
-                base_shift_hours, break_hours, payment_schedule, conditions
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                base_shift_hours, break_hours, payment_schedule, conditions,
+                overtime_rounding, overtime_threshold
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id, position, base_rate_net, base_rate_gross,
             tax_percentage, base_overtime_rate, daily_allowance,
-            base_shift_hours, break_hours, payment_schedule, conditions
+            base_shift_hours, break_hours, payment_schedule, conditions,
+            overtime_rounding, overtime_threshold
         ))
         await db.commit()
         return cursor.lastrowid
@@ -398,24 +407,26 @@ async def add_additional_service(
     name: str,
     cost: int,
     application_rule: str = 'on_mention',
+    tax_percentage: float = 13,
     keywords: str = ''
 ):
     """
-    Добавление дополнительной услуги
+    Добавление дополнительной услуги (ОБНОВЛЕНО: добавлен tax_percentage)
     
     Args:
         profession_id: ID профессии
         name: Название услуги (например, "обед")
-        cost: Стоимость (₽)
+        cost: Стоимость (₽) нетто
         application_rule: Правило применения (on_mention, every_shift)
+        tax_percentage: Процент налога для этой услуги (по умолчанию 13%)
         keywords: Ключевые слова для парсинга (JSON array)
     """
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute("""
             INSERT INTO additional_services (
-                profession_id, name, cost, application_rule, keywords
-            ) VALUES (?, ?, ?, ?, ?)
-        """, (profession_id, name, cost, application_rule, keywords))
+                profession_id, name, cost, tax_percentage, application_rule, keywords
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        """, (profession_id, name, cost, tax_percentage, application_rule, keywords))
         await db.commit()
         return cursor.lastrowid
 

@@ -5,8 +5,11 @@ from aiogram import Router, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from datetime import datetime
 import json
+import aiosqlite
+from config import DATABASE_PATH
 from database import get_active_project, get_user, create_shift, confirm_shift
 from parser import parse_shift_message
+from calculator import calculate_shift_earnings
 
 router = Router()
 
@@ -172,21 +175,94 @@ async def confirm_shift_callback(callback: CallbackQuery):
     # Подтверждаем смену
     await confirm_shift(shift_id)
     
-    # Удаляем из временного хранилища
-    del pending_shifts[callback.from_user.id]
-    
-    # Формируем итоговое сообщение
-    date_obj = datetime.strptime(result["date"], "%Y-%m-%d")
-    date_str = date_obj.strftime("%d.%m.%Y")
-    
-    text = f"""✅ Смена #{shift_id} подтверждена!
+    # === НОВЫЙ КОД: Запускаем расчёт ===
+    try:
+        details, total_net, total_gross = await calculate_shift_earnings(
+            shift_id=shift_id,
+            project_id=data["project_id"]
+        )
+        
+        # Обновляем статус смены на "calculated"
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            await db.execute(
+                "UPDATE shifts SET status = 'calculated' WHERE id = ?",
+                (shift_id,)
+            )
+            await db.commit()
+        
+        # Формируем детальную карточку с расчётом
+        date_obj = datetime.strptime(result["date"], "%Y-%m-%d")
+        date_str = date_obj.strftime("%d.%m.%Y")
+        
+        text = f"""✅ Смена #{shift_id} подтверждена и рассчитана!
 
 📅 Дата: {date_str}
-⏱ Часов: {data['total_hours']:.1f} ч
+⏱ Часов: {details['total_hours']:.1f} ч (из них {details['base_hours']:.0f} базовых)
 
-(Расчёт заработка будет добавлен в следующей фазе)"""
+💵 РАСЧЁТ:
+
+1️⃣ Базовая ставка:
+   • {details['breakdown']['base_pay']['net']:,}₽ (нетто)
+   • {details['breakdown']['base_pay']['gross']:,}₽ (брутто)
+"""
+        
+        # Добавляем переработки
+        if details['overtime_hours'] > 0:
+            text += f"\n2️⃣ Переработка ({details['overtime_hours']:.1f} ч):\n"
+            
+            total_overtime_net = 0
+            total_overtime_gross = 0
+            
+            for bracket in details['breakdown']['overtime']:
+                text += f"   • {bracket['bracket']}: {bracket['hours']:.1f}ч × {bracket['rate_gross']}₽ = {bracket['total_gross']:,}₽\n"
+                total_overtime_net += bracket['total_net']
+                total_overtime_gross += bracket['total_gross']
+            
+            text += f"   Итого: {total_overtime_net:,}₽ (нетто) / {total_overtime_gross:,}₽ (брутто)\n"
+        
+        # Добавляем суточные
+        if details['breakdown']['daily_allowance'] > 0:
+            text += f"\n3️⃣ Суточные: {details['breakdown']['daily_allowance']:,}₽\n"
+        
+        # Добавляем услуги
+        if details['breakdown']['services']:
+            text += f"\n4️⃣ Дополнительные услуги:\n"
+            
+            total_services_net = 0
+            total_services_gross = 0
+            
+            for service in details['breakdown']['services']:
+                text += f"   • {service['name']}: {service['cost_net']:,}₽ (нетто) / {service['cost_gross']:,}₽ (брутто)\n"
+                total_services_net += service['cost_net']
+                total_services_gross += service['cost_gross']
+            
+            text += f"   Итого: {total_services_net:,}₽ (нетто) / {total_services_gross:,}₽ (брутто)\n"
+        
+        # Итого
+        text += f"""
+━━━━━━━━━━━━━━━━━━━━
+💰 ИТОГО:
+   • Нетто: {total_net:,}₽
+   • Брутто: {total_gross:,}₽
+━━━━━━━━━━━━━━━━━━━━"""
+        
+        await callback.message.edit_text(text)
+        
+    except Exception as e:
+        # Если ошибка расчёта - показываем базовую информацию
+        date_obj = datetime.strptime(result["date"], "%Y-%m-%d")
+        date_str = date_obj.strftime("%d.%m.%Y")
+        
+        await callback.message.edit_text(
+            f"✅ Смена #{shift_id} подтверждена!\n\n"
+            f"📅 Дата: {date_str}\n"
+            f"⏱ Часов: {data['total_hours']:.1f} ч\n\n"
+            f"⚠️ Ошибка расчёта: {str(e)}\n\n"
+            f"Смена сохранена, но заработок не рассчитан."
+        )
     
-    await callback.message.edit_text(text)
+    # Удаляем из временного хранилища
+    del pending_shifts[callback.from_user.id]
     await callback.answer()
 
 
