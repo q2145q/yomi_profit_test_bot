@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start, projects, shifts
+from handlers import start, projects, shifts, miniapp
 
 # Настройка логирования
 logging.basicConfig(
@@ -33,6 +33,7 @@ async def main():
     dp.include_router(start.router)
     dp.include_router(projects.router)
     dp.include_router(shifts.router)  # Новый роутер для смен
+    dp.include_router(miniapp.router)
     
     # Запуск бота
     logging.info("Бот запущен!")
