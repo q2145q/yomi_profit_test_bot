@@ -119,3 +119,71 @@ textarea {
         margin-bottom: 0;
     }
 }
+/* Кнопки добавления */
+.add-button {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--tg-theme-button-text-color, #ffffff);
+    background-color: var(--tg-theme-button-color, #3390ec);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.add-button:active {
+    opacity: 0.8;
+}
+
+/* Контейнер для кнопок действий */
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+/* Карточка диапазона переработки */
+.rate-card {
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border: 1px solid var(--tg-theme-hint-color, #ccc);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.rate-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.rate-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, #000000);
+}
+
+.delete-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 18px;
+    color: var(--tg-theme-destructive-text-color, #ff3b30);
+    background-color: transparent;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.delete-btn:active {
+    background-color: rgba(255, 59, 48, 0.1);
+}
+
+.rate-card-body {
+    margin-top: 12px;
+}
