@@ -1,54 +1,69 @@
-// Проверка что Telegram WebApp доступен
-if (!window.Telegram || !window.Telegram.WebApp) {
-    alert('ОШИБКА: Telegram WebApp не найден!');
-    document.body.innerHTML = '<h1 style="color:red;">Ошибка: запустите из Telegram!</h1>';
-} else {
-    alert('✅ Telegram WebApp найден!');
+// Инициализация Telegram Web App
+const tg = window.Telegram.WebApp;
+tg.expand();
+
+// Получаем user_id из URL
+const urlParams = new URLSearchParams(window.location.search);
+const userId = urlParams.get('user_id');
+
+console.log('📝 Создание проекта');
+console.log('User ID:', userId);
+
+// API endpoint - относительный путь
+const API_URL = '/api';
+
+// Настройка главной кнопки
+tg.MainButton.setText('Создать проект');
+tg.MainButton.show();
+
+// Обработчик главной кнопки
+tg.MainButton.onClick(async function() {
+    console.log('🔵 Создаю проект...');
     
-    // Инициализация Telegram Web App
-    const tg = window.Telegram.WebApp;
+    // Блокируем кнопку
+    tg.MainButton.showProgress();
     
-    alert('✅ Расширяем окно...');
-    tg.expand();
+    // Собираем данные
+    const projectName = document.getElementById('project-name').value.trim();
+    const projectDescription = document.getElementById('project-description').value.trim();
     
-    alert('✅ Настраиваем кнопку...');
-    tg.MainButton.setText('Сохранить проект');
-    tg.MainButton.show();
+    // Валидация
+    if (!projectName) {
+        tg.MainButton.hideProgress();
+        tg.showAlert('Введите название проекта');
+        return;
+    }
     
-    alert('✅ Всё готово! Заполните форму.');
-    
-    // Обработчик нажатия на главную кнопку
-    tg.MainButton.onClick(function() {
-        alert('🔵 КНОПКА НАЖАТА!');
+    try {
+        // Отправляем запрос к API
+        const response = await fetch(`${API_URL}/projects`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: parseInt(userId),
+                name: projectName,
+                description: projectDescription
+            })
+        });
         
-        // Собираем данные
-        const projectName = document.getElementById('project-name').value.trim();
-        const projectDescription = document.getElementById('project-description').value.trim();
-        
-        // Валидация
-        if (!projectName) {
-            alert('❌ Введите название!');
-            tg.showAlert('Введите название проекта');
-            return;
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
         
-        alert('✅ Название: ' + projectName);
+        const data = await response.json();
+        console.log('✅ Проект создан:', data);
         
-        // Отправляем данные боту
-        const data = {
-            action: 'create_project',
-            project_name: projectName,
-            project_description: projectDescription
-        };
+        // Переходим на страницу проекта БЕЗ закрытия Mini App
+        window.location.href = 
+            `project-details.html?project_id=${data.project_id}&project_name=${encodeURIComponent(data.name)}&user_id=${userId}`;
         
-        alert('📤 Отправляю данные боту...');
-        
-        tg.sendData(JSON.stringify(data));
-        
-        alert('🚪 Закрываю Mini App...');
-        
-        tg.close();
-    });
-}
+    } catch (error) {
+        console.error('❌ Ошибка создания проекта:', error);
+        tg.MainButton.hideProgress();
+        tg.showAlert('Ошибка создания проекта: ' + error.message);
+    }
+});
 
-console.log('Create Project страница загружена');
+console.log('🚀 Страница создания проекта готова');

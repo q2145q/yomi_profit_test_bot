@@ -17,7 +17,7 @@ body {
     max-width: 600px;
     margin: 0 auto;
     padding: 16px;
-    padding-bottom: 80px; /* Место для кнопки Telegram */
+    padding-bottom: 80px;
 }
 
 h1 {
@@ -61,7 +61,8 @@ label {
 
 input[type="text"],
 input[type="number"],
-textarea {
+textarea,
+select {
     width: 100%;
     padding: 12px;
     font-size: 16px;
@@ -74,7 +75,8 @@ textarea {
 
 input[type="text"]:focus,
 input[type="number"]:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
     outline: none;
     border-color: var(--tg-theme-button-color, #3390ec);
 }
@@ -104,22 +106,7 @@ textarea {
     margin-bottom: 0;
 }
 
-/* Адаптив для мобильных */
-@media (max-width: 480px) {
-    .form-row {
-        flex-direction: column;
-        gap: 0;
-    }
-    
-    .form-row .form-group {
-        margin-bottom: 16px;
-    }
-    
-    .form-row .form-group:last-child {
-        margin-bottom: 0;
-    }
-}
-/* Кнопки добавления */
+/* Кнопки */
 .add-button {
     width: 100%;
     padding: 12px;
@@ -131,13 +118,13 @@ textarea {
     border-radius: 8px;
     cursor: pointer;
     transition: opacity 0.2s;
+    margin-top: 16px;
 }
 
 .add-button:active {
     opacity: 0.8;
 }
 
-/* Контейнер для кнопок действий */
 .actions {
     display: flex;
     flex-direction: column;
@@ -186,4 +173,131 @@ textarea {
 
 .rate-card-body {
     margin-top: 12px;
+}
+
+/* ============================================
+   КАРТОЧКИ ПРОЕКТОВ
+   ============================================ */
+
+.project-card {
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.project-card:active {
+    background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
+    transform: scale(0.98);
+}
+
+.project-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.project-status {
+    font-size: 12px;
+}
+
+.project-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, #000000);
+}
+
+.project-card-body {
+    margin-top: 8px;
+}
+
+.project-description {
+    font-size: 14px;
+    color: var(--tg-theme-hint-color, #666);
+    margin-bottom: 8px;
+}
+
+.project-meta {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #999);
+}
+
+/* ============================================
+   КАРТОЧКИ ПРОФЕССИЙ
+   ============================================ */
+
+.profession-card {
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.profession-card h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--tg-theme-text-color, #000000);
+}
+
+.profession-details {
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.profession-details p {
+    margin-bottom: 8px;
+}
+
+.profession-details ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.profession-details li {
+    margin-bottom: 4px;
+}
+
+/* ============================================
+   КАРТОЧКИ УСЛУГ
+   ============================================ */
+
+.service-card {
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.service-card h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--tg-theme-text-color, #000000);
+}
+
+.service-card p {
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+/* Адаптив для мобильных */
+@media (max-width: 480px) {
+    .form-row {
+        flex-direction: column;
+        gap: 0;
+    }
+    
+    .form-row .form-group {
+        margin-bottom: 16px;
+    }
+    
+    .form-row .form-group:last-child {
+        margin-bottom: 0;
+    }
 }

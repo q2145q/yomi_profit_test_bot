@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Добавить услугу</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>💼 Добавить услугу</h1>
+        
+        <section class="section">
+            <h2>Основные настройки</h2>
+            
+            <div class="form-group">
+                <label for="service-name">Название услуги *</label>
+                <input type="text" id="service-name" placeholder="Например: обед">
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="service-cost">Стоимость (нетто) *</label>
+                    <input type="number" id="service-cost" placeholder="500">
+                    <span class="hint">₽</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="service-tax">Налог *</label>
+                    <input type="number" id="service-tax" value="15" step="0.1">
+                    <span class="hint">%</span>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="keywords">Ключевые слова</label>
+                <input type="text" id="keywords" placeholder="обед, текущий обед">
+                <span class="hint">Через запятую для парсинга</span>
+            </div>
+            
+            <div class="form-group">
+                <label for="application-rule">Правило применения *</label>
+                <select id="application-rule">
+                    <option value="on_mention">При упоминании в сообщении</option>
+                    <option value="every_shift">Автоматически к каждой смене</option>
+                </select>
+            </div>
+        </section>
+    </div>
+    
+    <script src="add-service.js"></script>
+</body>
+</html>

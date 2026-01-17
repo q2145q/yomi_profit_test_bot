@@ -1,22 +1,25 @@
 // Инициализация Telegram Web App
 const tg = window.Telegram.WebApp;
-
-// Расширяем на весь экран
 tg.expand();
 
-// Получаем project_id из URL
+// Получаем параметры из URL
 const urlParams = new URLSearchParams(window.location.search);
 const projectId = urlParams.get('project_id');
+const projectName = urlParams.get('project_name');
+const userId = urlParams.get('user_id');
+
+console.log('👤 Добавление профессии');
+console.log('Project ID:', projectId);
+
+// API endpoint - относительный путь
+const API_URL = '/api';
 
 // Настройка главной кнопки
 tg.MainButton.setText('Сохранить профессию');
 tg.MainButton.show();
 
-// Счётчик для уникальных ID диапазонов
+// Счётчик для диапазонов
 let rateCounter = 0;
-
-// Массив для хранения диапазонов
-let progressiveRates = [];
 
 // Обработчик кнопки "Добавить диапазон"
 document.getElementById('add-rate-btn').addEventListener('click', function() {
@@ -28,7 +31,6 @@ function addRateRange() {
     rateCounter++;
     const rateId = `rate-${rateCounter}`;
     
-    // Создаём HTML для диапазона
     const rateCard = document.createElement('div');
     rateCard.className = 'rate-card';
     rateCard.id = rateId;
@@ -46,7 +48,7 @@ function addRateRange() {
                 <div class="form-group">
                     <label>До (часы)</label>
                     <input type="number" class="rate-to" step="0.1" placeholder="2">
-                    <span class="hint">Оставь пустым для "бесконечности"</span>
+                    <span class="hint">Пусто = бесконечность</span>
                 </div>
             </div>
             <div class="form-group">
@@ -56,7 +58,6 @@ function addRateRange() {
         </div>
     `;
     
-    // Добавляем в список
     document.getElementById('progressive-rates-list').appendChild(rateCard);
 }
 
@@ -68,8 +69,16 @@ function deleteRateRange(rateId) {
     }
 }
 
+// Делаем функцию глобальной для onclick
+window.deleteRateRange = deleteRateRange;
+
 // Обработчик главной кнопки
-tg.MainButton.onClick(function() {
+tg.MainButton.onClick(async function() {
+    console.log('🔵 Сохраняю профессию...');
+    
+    // Блокируем кнопку
+    tg.MainButton.showProgress();
+    
     // Собираем основные данные
     const position = document.getElementById('position').value.trim();
     const baseRate = parseInt(document.getElementById('base-rate').value) || 0;
@@ -81,13 +90,15 @@ tg.MainButton.onClick(function() {
     const dailyAllowance = parseInt(document.getElementById('daily-allowance').value) || 0;
     const conditions = document.getElementById('conditions').value.trim();
     
-    // Валидация основных полей
+    // Валидация
     if (!position) {
+        tg.MainButton.hideProgress();
         tg.showAlert('Введите должность');
         return;
     }
     
     if (baseRate <= 0) {
+        tg.MainButton.hideProgress();
         tg.showAlert('Введите базовую ставку');
         return;
     }
@@ -102,45 +113,58 @@ tg.MainButton.onClick(function() {
         const to = toInput === '' ? null : parseFloat(toInput);
         const rate = parseInt(card.querySelector('.rate-value').value) || 0;
         
-        // Валидация диапазона
-        if (rate <= 0) {
-            tg.showAlert(`Диапазон ${index + 1}: введите ставку`);
-            return;
+        if (rate > 0) {
+            rates.push({
+                hours_from: from,
+                hours_to: to,
+                rate: rate,
+                order_num: index + 1
+            });
         }
-        
-        if (to !== null && to <= from) {
-            tg.showAlert(`Диапазон ${index + 1}: "До" должно быть больше "От"`);
-            return;
-        }
-        
-        rates.push({
-            hours_from: from,
-            hours_to: to,
-            rate: rate,
-            order_num: index + 1
-        });
     });
     
-    // Формируем данные для отправки
-    const data = {
-        action: 'add_profession',
-        project_id: projectId,
-        position: position,
-        base_rate_net: baseRate,
-        tax_percentage: tax,
-        base_shift_hours: baseHours,
-        break_hours: breakHours,
-        overtime_threshold: overtimeThreshold,
-        overtime_rounding: overtimeRounding,
-        daily_allowance: dailyAllowance,
-        conditions: conditions,
-        progressive_rates: rates
-    };
-    
-    // Отправляем боту
-    tg.sendData(JSON.stringify(data));
-    tg.close();
+    try {
+        // Формируем данные для отправки
+        const data = {
+            position: position,
+            base_rate_net: baseRate,
+            tax_percentage: tax,
+            base_shift_hours: baseHours,
+            break_hours: breakHours,
+            overtime_threshold: overtimeThreshold,
+            overtime_rounding: overtimeRounding,
+            daily_allowance: dailyAllowance,
+            conditions: conditions,
+            progressive_rates: rates
+        };
+        
+        console.log('📤 Отправляю данные:', data);
+        
+        // Отправляем запрос к API
+        const response = await fetch(`${API_URL}/projects/${projectId}/professions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('✅ Профессия создана:', result);
+        
+        // Возвращаемся на страницу проекта
+        window.location.href = 
+            `project-details.html?project_id=${projectId}&project_name=${encodeURIComponent(projectName)}&user_id=${userId}`;
+        
+    } catch (error) {
+        console.error('❌ Ошибка сохранения профессии:', error);
+        tg.MainButton.hideProgress();
+        tg.showAlert('Ошибка сохранения: ' + error.message);
+    }
 });
 
-console.log('Add Profession страница загружена');
-console.log('Project ID:', projectId);
+console.log('🚀 Страница добавления профессии готова');

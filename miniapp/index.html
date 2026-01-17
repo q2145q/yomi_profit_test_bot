@@ -3,116 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Настройка проекта</title>
+    <title>Мои проекты</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- Подключение Telegram Web App SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    </head>
+</head>
 <body>
     <div class="container">
-        <h1>📋 Новый проект</h1>
+        <h1>📋 Мои проекты</h1>
         
-        <!-- СЕКЦИЯ 1: Общая информация -->
-        <section class="section">
-            <h2>Общая информация</h2>
-            
-            <div class="form-group">
-                <label for="project-name">Название проекта *</label>
-                <input type="text" id="project-name" placeholder="Например: Фильм 'Название'">
-            </div>
-            
-            <div class="form-group">
-                <label for="project-description">Описание (опционально)</label>
-                <textarea id="project-description" rows="3" placeholder="Краткое описание проекта"></textarea>
-            </div>
-        </section>
+        <!-- Список проектов -->
+        <div id="projects-list">
+            <p class="hint">⏳ Загрузка проектов...</p>
+        </div>
         
-        <!-- СЕКЦИЯ 2: Настройка профессии -->
-        <section class="section">
-            <h2>Настройка профессии</h2>
-            
-            <div class="form-group">
-                <label for="position">Должность *</label>
-                <input type="text" id="position" placeholder="Например: Оператор">
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="base-rate">Базовая ставка (нетто) *</label>
-                    <input type="number" id="base-rate" placeholder="10000">
-                    <span class="hint">₽ за смену</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="tax">Налог *</label>
-                    <input type="number" id="tax" value="13" step="0.1">
-                    <span class="hint">%</span>
-                </div>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="base-hours">Базовые часы *</label>
-                    <input type="number" id="base-hours" value="12" step="0.5">
-                    <span class="hint">часов в смене</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="break-hours">Разрыв *</label>
-                    <input type="number" id="break-hours" value="12" step="0.5">
-                    <span class="hint">часов между сменами</span>
-                </div>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="overtime-threshold">Порог переработки</label>
-                    <input type="number" id="overtime-threshold" value="0.25" step="0.05">
-                    <span class="hint">часов (первые не считаются)</span>
-                </div>
-                
-                <div class="form-group">
-                    <label for="overtime-rounding">Округление</label>
-                    <input type="number" id="overtime-rounding" value="0.5" step="0.1">
-                    <span class="hint">часов</span>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="daily-allowance">Суточные</label>
-                <input type="number" id="daily-allowance" value="1000">
-                <span class="hint">₽</span>
-            </div>
-            
-            <div class="form-group">
-                <label for="conditions">Специальные условия (опционально)</label>
-                <textarea id="conditions" rows="2" placeholder="Например: 7-й день подряд × 2"></textarea>
-                <span class="hint">Эти условия будет применять AI при расчёте</span>
-            </div>
-        </section>
-        
-        
-        <!-- СЕКЦИЯ 3: Прогрессивные ставки -->
-        <section class="section">
-            <h2>Прогрессивные ставки переработки</h2>
-            <p class="hint">Разные ставки для разных часов переработки</p>
-            
-            <!-- Контейнер для списка диапазонов -->
-            <div id="progressive-rates-list"></div>
-            
-            <!-- Кнопка добавления нового диапазона -->
-            <button type="button" class="add-button" id="add-rate-btn">
-                + Добавить диапазон переработки
-            </button>
-        </section>
-        
-        <!-- СЕКЦИЯ 4: Дополнительные услуги (пока заглушка) -->
-        <section class="section">
-            <h2>Дополнительные услуги</h2>
-            <p class="hint">Будет добавлено в следующем шаге</p>
-        </section>
+        <!-- Кнопка создания проекта -->
+        <button type="button" class="add-button" id="create-project-btn">
+            + Создать новый проект
+        </button>
     </div>
     
-    <script src="app.js"></script>
+    <script src="index.js"></script>
 </body>
 </html>
