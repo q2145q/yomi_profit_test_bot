@@ -19,7 +19,7 @@ async def cmd_projects(message: Message):
     
     # URL главной страницы Mini App с user_id
     # Замени на свой ngrok URL!
-    webapp_url = f"https://7e3feaf934db.ngrok-free.app/index.html?user_id={message.from_user.id}"
+    webapp_url = f"https://21bf2587f988.ngrok-free.app/index.html?user_id={message.from_user.id}"
     
     # Создаём кнопку для открытия Mini App
     keyboard = ReplyKeyboardMarkup(

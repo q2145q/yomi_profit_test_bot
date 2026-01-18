@@ -286,6 +286,139 @@ textarea {
     margin-bottom: 4px;
 }
 
+/* ============================================
+   СТАТИСТИКА
+   ============================================ */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stat-item {
+    text-align: center;
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--tg-theme-button-color, #3390ec);
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #999);
+}
+
+.earnings-summary {
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.earnings-summary p {
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.earnings-summary p:last-child {
+    margin-bottom: 0;
+}
+
+/* ============================================
+   КНОПКИ ФИЛЬТРОВ
+   ============================================ */
+
+.filter-buttons {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.filter-btn {
+    flex: 1;
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--tg-theme-text-color, #000000);
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-btn.active {
+    color: var(--tg-theme-button-text-color, #ffffff);
+    background-color: var(--tg-theme-button-color, #3390ec);
+    border-color: var(--tg-theme-button-color, #3390ec);
+}
+
+.filter-btn:active {
+    opacity: 0.8;
+}
+
+/* ============================================
+   ТАБЛИЦА СМЕН
+   ============================================ */
+
+.shifts-table {
+    background-color: var(--tg-theme-bg-color, #ffffff);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.shift-row {
+    padding: 12px;
+    border-bottom: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+}
+
+.shift-row:last-child {
+    border-bottom: none;
+}
+
+.shift-date {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, #000000);
+    margin-bottom: 4px;
+}
+
+.shift-time {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #666);
+    margin-bottom: 4px;
+}
+
+.shift-hours {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #666);
+    margin-bottom: 4px;
+}
+
+.overtime-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--tg-theme-button-text-color, #ffffff);
+    background-color: var(--tg-theme-button-color, #3390ec);
+    border-radius: 4px;
+    margin-left: 4px;
+}
+
+.shift-earnings {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--tg-theme-button-color, #3390ec);
+}
+
 /* Адаптив для мобильных */
 @media (max-width: 480px) {
     .form-row {
@@ -299,5 +432,9 @@ textarea {
     
     .form-row .form-group:last-child {
         margin-bottom: 0;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
     }
 }

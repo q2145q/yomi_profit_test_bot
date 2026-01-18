@@ -24,6 +24,13 @@ document.getElementById('project-title').textContent = `📋 ${projectName}`;
 // Загружаем данные проекта
 loadProjectDetails();
 
+// Обработчик кнопки "Статистика"
+document.getElementById('statistics-btn').addEventListener('click', function() {
+    console.log('➡️ Переход на statistics.html');
+    window.location.href = 
+        `statistics.html?project_id=${projectId}&project_name=${encodeURIComponent(projectName)}&user_id=${userId}`;
+});
+
 // Обработчик кнопки "Добавить профессию"
 document.getElementById('add-profession-btn').addEventListener('click', function() {
     console.log('➡️ Переход на add-profession.html');
