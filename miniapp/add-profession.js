@@ -138,6 +138,7 @@ tg.MainButton.onClick(async function() {
     const overtimeThresholdHours = overtimeThresholdMinutes / 60;
     const overtimeRounding = parseFloat(document.getElementById('overtime-rounding').value);
     const dailyAllowance = parseInt(document.getElementById('daily-allowance').value) || 0;
+    const baseOvertimeRate = parseInt(document.getElementById('base-overtime-rate').value) || 0;
     const conditions = document.getElementById('conditions').value.trim();
     
     // Валидация
@@ -200,6 +201,7 @@ tg.MainButton.onClick(async function() {
         const data = {
             position: position,
             base_rate_net: baseRate,
+            base_overtime_rate: baseOvertimeRate,
             tax_percentage: tax,
             base_shift_hours: baseHours,
             break_hours: breakHours,

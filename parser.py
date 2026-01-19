@@ -14,6 +14,8 @@ except:
     # Для теста используем заглушку
     client = None
 
+# === ФУНКЦИИ ДОЛЖНЫ БЫТЬ ОПРЕДЕЛЕНЫ ДО parse_shift_message() ===
+
 def find_matching_services(text: str, available_services: list) -> list:
     """
     Умный поиск УСЛУГ в тексте (БЕЗ обедов!)
@@ -50,6 +52,7 @@ def find_matching_services(text: str, available_services: list) -> list:
     
     return found_services
 
+
 def find_matching_meals(text: str, available_meals: list) -> list:
     """
     Умный поиск ОБЕДОВ в тексте
@@ -67,10 +70,17 @@ def find_matching_meals(text: str, available_meals: list) -> list:
     for meal in available_meals:
         meal_lower = meal.lower()
         
-        # Точное совпадение
-        if meal_lower in text_lower:
+        # ИСПРАВЛЕНИЕ: Более строгое совпадение для слова "обед"
+        if meal_lower == "обед":
+            # "обед" должен быть отдельным словом
+            import re
+            if re.search(r'\bобед\b', text_lower):
+                # Но только если НЕТ "текущий" или "поздний" рядом
+                if not re.search(r'(текущий|поздний)\s+обед', text_lower):
+                    found_meals.append(meal)
+        # Для остальных - обычная логика
+        elif meal_lower in text_lower:
             found_meals.append(meal)
-        # Частичное совпадение (каждое слово)
         else:
             words = meal_lower.split()
             if any(word in text_lower for word in words if len(word) > 3):
@@ -78,13 +88,14 @@ def find_matching_meals(text: str, available_meals: list) -> list:
     
     return found_meals
 
+
 async def parse_shift_message(
     message: str,
     current_date: str,
     current_time: str,
     base_hours: int = 12,
     services: list = None,
-    meals: list = None  # НОВЫЙ ПАРАМЕТР!
+    meals: list = None
 ) -> dict:
     """
     Парсинг сообщения о смене с помощью AI
@@ -187,7 +198,7 @@ async def parse_shift_message(
         
         # Отправляем запрос в OpenAI
         response = await client.chat.completions.create(
-            model="gpt-4.1-nano",  # Используем более дешевую модель
+            model="gpt-4.1-nano",  # ИСПРАВЛЕНО: используем существующую модель
             messages=[
                 {"role": "system", "content": "Ты — точный парсер данных. Отвечай только валидным JSON."},
                 {"role": "user", "content": prompt}
@@ -233,7 +244,7 @@ async def parse_shift_message(
             "start_time": None,
             "end_time": None,
             "services": [],
-            "meals": [],  # НОВОЕ ПОЛЕ!
+            "meals": [],
             "confidence": 0.0,
             "missing_fields": ["start_time", "end_time"],
             "error": str(e)
