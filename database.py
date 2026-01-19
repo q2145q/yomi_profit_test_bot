@@ -1,6 +1,6 @@
 """
 Работа с базой данных SQLite
-Статус: 🚧 В разработке (добавлена таблица shifts)
+Статус: 🚧 В разработке - Шаг 6.1: Добавлены таблицы для обедов
 """
 import aiosqlite
 from config import DATABASE_PATH
@@ -87,7 +87,7 @@ async def init_db():
             )
         """)
 
-        # Таблица additional_services (ОБНОВЛЕНО: добавлен tax_percentage)
+        # Таблица additional_services
         await db.execute("""
             CREATE TABLE IF NOT EXISTS additional_services (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,6 +100,31 @@ async def init_db():
                 keywords TEXT,
                 FOREIGN KEY (profession_id) REFERENCES professions(id),
                 FOREIGN KEY (linked_service_id) REFERENCES additional_services(id)
+            )
+        """)
+        
+        # === НОВЫЕ ТАБЛИЦЫ (Шаг 6.1) ===
+        
+        # Таблица meal_types (типы обедов: текущий, поздний и т.д.)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS meal_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profession_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                adds_overtime_hours REAL DEFAULT 1.0,
+                keywords TEXT,
+                FOREIGN KEY (profession_id) REFERENCES professions(id)
+            )
+        """)
+        
+        # Таблица shift_meals (связь смен и обедов)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS shift_meals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shift_id INTEGER NOT NULL,
+                meal_type_id INTEGER NOT NULL,
+                FOREIGN KEY (shift_id) REFERENCES shifts(id),
+                FOREIGN KEY (meal_type_id) REFERENCES meal_types(id)
             )
         """)
 
@@ -133,8 +158,6 @@ async def init_db():
             )
         """)
 
-
-        
         await db.commit()
 
 async def create_user(user_id: int, username: str):
@@ -186,7 +209,7 @@ async def get_active_project(user_id: int):
         ) as cursor:
             return await cursor.fetchone()
 
-# === НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ СО СМЕНАМИ ===
+# === ФУНКЦИИ ДЛЯ РАБОТЫ СО СМЕНАМИ ===
 
 async def create_shift(
     project_id: int,
@@ -197,21 +220,7 @@ async def create_shift(
     original_message: str,
     parsed_data: str
 ):
-    """
-    Создание новой смены
-    
-    Args:
-        project_id: ID проекта
-        date: Дата смены (YYYY-MM-DD)
-        start_time: Время начала (HH:MM)
-        end_time: Время окончания (HH:MM)
-        total_hours: Общее количество часов
-        original_message: Исходное сообщение пользователя
-        parsed_data: Распознанные данные (JSON string)
-    
-    Returns:
-        ID созданной смены
-    """
+    """Создание новой смены"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute("""
             INSERT INTO shifts (
@@ -223,12 +232,7 @@ async def create_shift(
         return cursor.lastrowid
 
 async def confirm_shift(shift_id: int):
-    """
-    Подтверждение смены
-    
-    Args:
-        shift_id: ID смены
-    """
+    """Подтверждение смены"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             UPDATE shifts 
@@ -238,15 +242,7 @@ async def confirm_shift(shift_id: int):
         await db.commit()
 
 async def get_shift(shift_id: int):
-    """
-    Получение смены по ID
-    
-    Args:
-        shift_id: ID смены
-    
-    Returns:
-        Данные смены или None
-    """
+    """Получение смены по ID"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -256,16 +252,7 @@ async def get_shift(shift_id: int):
             return await cursor.fetchone()
 
 async def get_user_shifts(project_id: int, limit: int = 10):
-    """
-    Получение смен проекта
-    
-    Args:
-        project_id: ID проекта
-        limit: Максимальное количество смен
-    
-    Returns:
-        Список смен
-    """
+    """Получение смен проекта"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -275,12 +262,7 @@ async def get_user_shifts(project_id: int, limit: int = 10):
             return await cursor.fetchall()
 
 async def delete_shift(shift_id: int):
-    """
-    Удаление смены
-    
-    Args:
-        shift_id: ID смены
-    """
+    """Удаление смены"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("DELETE FROM shifts WHERE id = ?", (shift_id,))
         await db.commit()
@@ -301,26 +283,7 @@ async def create_profession(
     overtime_rounding: float = 0,
     overtime_threshold: float = 0
 ):
-    """
-    Создание настроек профессии для проекта
-    
-    Args:
-        project_id: ID проекта
-        position: Должность (например, "Оператор")
-        base_rate_net: Базовая ставка нетто (₽)
-        tax_percentage: Процент налога (например, 13)
-        base_overtime_rate: Ставка переработки (₽/ч)
-        daily_allowance: Суточные (₽)
-        base_shift_hours: Базовое количество часов
-        break_hours: Часы разрыва между сменами
-        payment_schedule: График выплат
-        conditions: Специальные условия (текст для AI)
-        overtime_rounding: Округление переработки (0.5 = по полчаса, 0 = без округления)
-        overtime_threshold: Порог переработки в часах (0.25 = первые 15 минут не считаются)
-    
-    Returns:
-        ID созданной профессии
-    """
+    """Создание настроек профессии для проекта"""
     # Расчёт брутто из нетто
     base_rate_gross = round(base_rate_net / (1 - tax_percentage / 100))
     
@@ -342,15 +305,7 @@ async def create_profession(
         return cursor.lastrowid
 
 async def get_profession_by_project(project_id: int):
-    """
-    Получение настроек профессии по проекту
-    
-    Args:
-        project_id: ID проекта
-    
-    Returns:
-        Данные профессии или None
-    """
+    """Получение настроек профессии по проекту"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -366,16 +321,7 @@ async def add_progressive_rate(
     rate: int,
     order_num: int
 ):
-    """
-    Добавление прогрессивной ставки переработки
-    
-    Args:
-        profession_id: ID профессии
-        hours_from: Часы от (например, 0)
-        hours_to: Часы до (например, 2) или None для бесконечности
-        rate: Ставка (₽/ч)
-        order_num: Порядок применения (1, 2, 3...)
-    """
+    """Добавление прогрессивной ставки переработки"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO progressive_rates (
@@ -385,15 +331,7 @@ async def add_progressive_rate(
         await db.commit()
 
 async def get_progressive_rates(profession_id: int):
-    """
-    Получение прогрессивных ставок профессии
-    
-    Args:
-        profession_id: ID профессии
-    
-    Returns:
-        Список ставок, отсортированный по order_num
-    """
+    """Получение прогрессивных ставок профессии"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -410,17 +348,7 @@ async def add_additional_service(
     tax_percentage: float = 13,
     keywords: str = ''
 ):
-    """
-    Добавление дополнительной услуги (ОБНОВЛЕНО: добавлен tax_percentage)
-    
-    Args:
-        profession_id: ID профессии
-        name: Название услуги (например, "обед")
-        cost: Стоимость (₽) нетто
-        application_rule: Правило применения (on_mention, every_shift)
-        tax_percentage: Процент налога для этой услуги (по умолчанию 13%)
-        keywords: Ключевые слова для парсинга (JSON array)
-    """
+    """Добавление дополнительной услуги"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute("""
             INSERT INTO additional_services (
@@ -431,19 +359,93 @@ async def add_additional_service(
         return cursor.lastrowid
 
 async def get_additional_services(profession_id: int):
-    """
-    Получение дополнительных услуг профессии
-    
-    Args:
-        profession_id: ID профессии
-    
-    Returns:
-        Список услуг
-    """
+    """Получение дополнительных услуг профессии"""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM additional_services WHERE profession_id = ?",
             (profession_id,)
         ) as cursor:
+            return await cursor.fetchall()
+
+# === НОВЫЕ ФУНКЦИИ (Шаг 6.1): РАБОТА С ОБЕДАМИ ===
+
+async def add_meal_type(
+    profession_id: int,
+    name: str,
+    adds_overtime_hours: float = 1.0,
+    keywords: str = ''
+):
+    """
+    Добавление типа обеда
+    
+    Args:
+        profession_id: ID профессии
+        name: Название обеда (например, "текущий обед", "поздний обед")
+        adds_overtime_hours: Сколько часов добавляет к переработке (по умолчанию 1.0)
+        keywords: Ключевые слова для парсинга (JSON array)
+    
+    Returns:
+        ID созданного типа обеда
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO meal_types (
+                profession_id, name, adds_overtime_hours, keywords
+            ) VALUES (?, ?, ?, ?)
+        """, (profession_id, name, adds_overtime_hours, keywords))
+        await db.commit()
+        return cursor.lastrowid
+
+async def get_meal_types(profession_id: int):
+    """
+    Получение типов обедов профессии
+    
+    Args:
+        profession_id: ID профессии
+    
+    Returns:
+        Список типов обедов
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM meal_types WHERE profession_id = ?",
+            (profession_id,)
+        ) as cursor:
+            return await cursor.fetchall()
+
+async def add_shift_meal(shift_id: int, meal_type_id: int):
+    """
+    Привязать обед к смене
+    
+    Args:
+        shift_id: ID смены
+        meal_type_id: ID типа обеда
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT INTO shift_meals (shift_id, meal_type_id)
+            VALUES (?, ?)
+        """, (shift_id, meal_type_id))
+        await db.commit()
+
+async def get_shift_meals(shift_id: int):
+    """
+    Получить все обеды смены с деталями
+    
+    Args:
+        shift_id: ID смены
+    
+    Returns:
+        Список обедов с информацией о типе обеда
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT mt.* 
+            FROM shift_meals sm
+            JOIN meal_types mt ON sm.meal_type_id = mt.id
+            WHERE sm.shift_id = ?
+        """, (shift_id,)) as cursor:
             return await cursor.fetchall()

@@ -11,7 +11,8 @@ from database import (
     get_user, get_user_projects, create_project,
     get_profession_by_project, create_profession,
     add_progressive_rate, get_progressive_rates,
-    add_additional_service, get_additional_services
+    add_additional_service, get_additional_services,
+    get_meal_types, add_meal_type  # НОВОЕ!
 )
 import json
 import aiosqlite
@@ -115,7 +116,7 @@ def create_project_api():
 
 @app.route('/api/projects/<int:project_id>', methods=['GET'])
 def get_project_details(project_id):
-    """Получить детали проекта (профессии + услуги)"""
+    """Получить детали проекта (профессии + услуги + ОБЕДЫ)"""
     try:
         # Получаем профессию
         profession = run_async(get_profession_by_project(project_id))
@@ -124,7 +125,8 @@ def get_project_details(project_id):
             'project_id': project_id,
             'profession': None,
             'progressive_rates': [],
-            'services': []
+            'services': [],
+            'meals': []  # НОВОЕ!
         }
         
         if profession:
@@ -137,6 +139,11 @@ def get_project_details(project_id):
             # Получаем услуги
             services = run_async(get_additional_services(profession['id']))
             result['services'] = [dict(s) for s in services]
+            
+            # === НОВОЕ: Получаем типы обедов ===
+            meals = run_async(get_meal_types(profession['id']))
+            result['meals'] = [dict(m) for m in meals]
+            # === КОНЕЦ НОВОГО ===
         
         return jsonify(result)
     
@@ -185,6 +192,19 @@ def add_profession_api(project_id):
             ))
         
         print(f"✅ Добавлено {len(rates)} прогрессивных ставок")
+        
+        # === НОВОЕ: Добавляем типы обедов ===
+        meals = data.get('meals', [])
+        for meal in meals:
+            run_async(add_meal_type(
+                profession_id=profession_id,
+                name=meal['name'],
+                adds_hours=meal['adds_hours'],
+                keywords=meal['keywords']
+            ))
+        
+        print(f"✅ Добавлено {len(meals)} типов обедов")
+        # === КОНЕЦ НОВОГО ===
         
         return jsonify({
             'success': True,
@@ -364,8 +384,8 @@ def export_project_csv(project_id):
             'Конец',
             'Часов',
             'Переработка',
-            'Заработок (нетто)',
-            'Заработок (брутто)'
+            'Заработок (чистыми)',
+            'Заработок (с налогом)'
         ])
         
         # Данные

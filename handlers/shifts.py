@@ -1,5 +1,6 @@
 """
 Обработчики для работы со сменами
+Статус: ✅ Шаг 6.1 - Обеды отображаются отдельно от услуг
 """
 from aiogram import Router, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -7,14 +8,16 @@ from datetime import datetime
 import json
 import aiosqlite
 from config import DATABASE_PATH
-from database import get_active_project, get_user, create_shift, confirm_shift
-from parser import parse_shift_message
-from calculator import calculate_shift_earnings
+from database_updated import (
+    get_active_project, get_user, create_shift, confirm_shift,
+    get_meal_types, add_shift_meal  # НОВОЕ!
+)
+from parser_updated import parse_shift_message  # ВАЖНО: обновлённый парсер!
+from calculator_fixed import calculate_shift_earnings  # ВАЖНО: исправленный калькулятор!
 
 router = Router()
 
 # Временное хранилище распарсенных смен (в памяти)
-# TODO: В будущем использовать Redis или FSM storage
 pending_shifts = {}
 
 @router.message(F.text & ~F.text.startswith("/"))
@@ -44,13 +47,14 @@ async def handle_text_message(message: Message):
     current_date = now.strftime("%Y-%m-%d")
     current_time = now.strftime("%H:%M")
     
-    # Парсим сообщение
+    # Парсим сообщение (с поддержкой обедов!)
     result = await parse_shift_message(
         message=message.text,
         current_date=current_date,
         current_time=current_time,
         base_hours=12,  # TODO: Брать из настроек проекта
-        services=["обед", "ронин", "текущий обед"]  # TODO: Брать из БД
+        services=["ронин"],  # TODO: Брать из БД (БЕЗ обедов!)
+        meals=["обед", "текущий обед", "поздний обед"]  # НОВОЕ: список обедов!
     )
     
     # Удаляем сообщение о процессе
@@ -58,7 +62,6 @@ async def handle_text_message(message: Message):
     
     # Проверяем результат
     if result.get("confidence", 0) < 0.4:
-        # Формируем сообщение об ошибке
         error_text = "🤔 Не смог распознать данные смены.\n\n"
         
         if result.get("error"):
@@ -108,7 +111,6 @@ async def handle_text_message(message: Message):
     start = datetime.strptime(result["start_time"], "%H:%M")
     end = datetime.strptime(result["end_time"], "%H:%M")
     
-    # Если окончание раньше начала - значит переход через полночь
     if end < start:
         end = end.replace(day=end.day + 1)
     
@@ -123,6 +125,13 @@ async def handle_text_message(message: Message):
 
 📁 Проект: {project['name']}
 """
+    
+    # === НОВОЕ: Показываем ОБЕДЫ отдельно от услуг! ===
+    
+    if result.get("meals"):
+        text += "\n🍽 Обеды:\n"
+        for meal in result["meals"]:
+            text += f"   • {meal}\n"
     
     if result.get("services"):
         text += "\n✅ Дополнительные услуги:\n"
@@ -175,7 +184,35 @@ async def confirm_shift_callback(callback: CallbackQuery):
     # Подтверждаем смену
     await confirm_shift(shift_id)
     
-    # === НОВЫЙ КОД: Запускаем расчёт ===
+    # === НОВОЕ: Сохраняем обеды в shift_meals! ===
+    
+    if result.get("meals"):
+        # Получаем типы обедов из БД
+        async with aiosqlite.connect(DATABASE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT id FROM professions WHERE project_id = ?",
+                (data["project_id"],)
+            ) as cursor:
+                profession = await cursor.fetchone()
+        
+        if profession:
+            meal_types = await get_meal_types(profession["id"])
+            
+            # Связываем обеды со сменой
+            for mentioned_meal in result["meals"]:
+                for meal_type in meal_types:
+                    meal_name_lower = meal_type["name"].lower()
+                    
+                    # Проверяем совпадение
+                    if (meal_name_lower in mentioned_meal.lower() or 
+                        mentioned_meal.lower() in meal_name_lower):
+                        
+                        await add_shift_meal(shift_id, meal_type["id"])
+                        break  # Нашли совпадение, переходим к следующему
+    
+    # === Запускаем расчёт ===
+    
     try:
         details, total_net, total_gross = await calculate_shift_earnings(
             shift_id=shift_id,
@@ -190,7 +227,8 @@ async def confirm_shift_callback(callback: CallbackQuery):
             )
             await db.commit()
         
-        # Формируем детальную карточку с расчётом
+        # === НОВАЯ КАРТОЧКА РАСЧЁТА С ОБЕДАМИ! ===
+        
         date_obj = datetime.strptime(result["date"], "%Y-%m-%d")
         date_str = date_obj.strftime("%d.%m.%Y")
         
@@ -206,9 +244,9 @@ async def confirm_shift_callback(callback: CallbackQuery):
    • {details['breakdown']['base_pay']['gross']:,}₽ (брутто)
 """
         
-        # Добавляем переработки
-        if details['overtime_hours'] > 0:
-            text += f"\n2️⃣ Переработка ({details['overtime_hours']:.1f} ч):\n"
+        # Добавляем переработки (прогрессивные ставки)
+        if details['base_overtime_hours'] > 0:
+            text += f"\n2️⃣ Переработка ({details['base_overtime_hours']:.1f} ч):\n"
             
             total_overtime_net = 0
             total_overtime_gross = 0
@@ -220,13 +258,27 @@ async def confirm_shift_callback(callback: CallbackQuery):
             
             text += f"   Итого: {total_overtime_net:,}₽ (нетто) / {total_overtime_gross:,}₽ (брутто)\n"
         
+        # === НОВОЕ: Добавляем обеды (БАЗОВАЯ ставка!) ===
+        
+        if details['breakdown']['meals']:
+            text += f"\n3️⃣ Обеды ({details['meal_hours']:.1f} ч по базовой ставке):\n"
+            
+            for meal in details['breakdown']['meals']:
+                text += f"   • {meal['name']}: {meal['adds_hours']:.1f}ч × {meal['rate_net']}₽ = {meal['total_net']:,}₽\n"
+            
+            # Итого по обедам (если их несколько)
+            if len(details['breakdown']['meals']) > 1:
+                total_meals_net = sum(m['total_net'] for m in details['breakdown']['meals'])
+                total_meals_gross = sum(m['total_gross'] for m in details['breakdown']['meals'])
+                text += f"   Итого: {total_meals_net:,}₽ (нетто) / {total_meals_gross:,}₽ (брутто)\n"
+        
         # Добавляем суточные
         if details['breakdown']['daily_allowance'] > 0:
-            text += f"\n3️⃣ Суточные: {details['breakdown']['daily_allowance']:,}₽\n"
+            text += f"\n4️⃣ Суточные: {details['breakdown']['daily_allowance']:,}₽\n"
         
         # Добавляем услуги
         if details['breakdown']['services']:
-            text += f"\n4️⃣ Дополнительные услуги:\n"
+            text += f"\n5️⃣ Дополнительные услуги:\n"
             
             total_services_net = 0
             total_services_gross = 0
@@ -249,7 +301,6 @@ async def confirm_shift_callback(callback: CallbackQuery):
         await callback.message.edit_text(text)
         
     except Exception as e:
-        # Если ошибка расчёта - показываем базовую информацию
         date_obj = datetime.strptime(result["date"], "%Y-%m-%d")
         date_str = date_obj.strftime("%d.%m.%Y")
         

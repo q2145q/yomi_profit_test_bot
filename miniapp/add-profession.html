@@ -21,7 +21,7 @@
             
             <div class="form-row">
                 <div class="form-group">
-                    <label for="base-rate">Базовая ставка (нетто) *</label>
+                    <label for="base-rate">Базовая ставка (чистыми) *</label>
                     <input type="number" id="base-rate" placeholder="10000">
                     <span class="hint">₽ за смену</span>
                 </div>
@@ -50,14 +50,17 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="overtime-threshold">Порог переработки</label>
-                    <input type="number" id="overtime-threshold" value="0.25" step="0.05">
-                    <span class="hint">часов (первые не считаются)</span>
+                    <input type="number" id="overtime-threshold" value="15" step="5">
+                    <span class="hint">минут (первые не считаются)</span>
                 </div>
                 
                 <div class="form-group">
                     <label for="overtime-rounding">Округление</label>
-                    <input type="number" id="overtime-rounding" value="0.5" step="0.1">
-                    <span class="hint">часов</span>
+                    <select id="overtime-rounding">
+                        <option value="1.0">По часам</option>
+                        <option value="0.5" selected>По полчаса</option>
+                        <option value="0.25">По 15 минут</option>
+                    </select>
                 </div>
             </div>
             
@@ -85,6 +88,20 @@
             <!-- Кнопка добавления -->
             <button type="button" class="add-button" id="add-rate-btn">
                 + Добавить диапазон переработки
+            </button>
+        </section>
+        
+        <!-- === НОВАЯ СЕКЦИЯ: ОБЕДЫ === -->
+        <section class="section">
+            <h2>🍽 Типы обедов</h2>
+            <p class="hint">Обеды добавляют часы переработки и оплачиваются по базовой ставке</p>
+            
+            <!-- Список обедов -->
+            <div id="meals-list"></div>
+            
+            <!-- Кнопка добавления -->
+            <button type="button" class="add-button" id="add-meal-btn">
+                + Добавить тип обеда
             </button>
         </section>
     </div>

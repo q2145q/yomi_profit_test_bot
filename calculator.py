@@ -1,8 +1,14 @@
 """
 Расчёт заработка по смене
-Статус: ✅ Исправлена логика брутто/нетто
+Статус: ✅ Шаг 6.1 - Обеды добавляют +1 час БАЗОВОЙ переработки
 """
-from database import get_profession_by_project, get_progressive_rates, get_additional_services
+from database_updated import (
+    get_profession_by_project, 
+    get_progressive_rates, 
+    get_additional_services,
+    get_meal_types,
+    get_shift_meals
+)
 import aiosqlite
 from config import DATABASE_PATH
 import json
@@ -17,9 +23,6 @@ async def calculate_shift_earnings(shift_id: int, project_id: int):
     
     Returns:
         tuple: (calculation_details, total_net, total_gross)
-        - calculation_details: детальный расчёт (dict)
-        - total_net: итого нетто (int)
-        - total_gross: итого брутто (int)
     """
     # 1. Получаем данные смены
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -43,106 +46,170 @@ async def calculate_shift_earnings(shift_id: int, project_id: int):
     base_hours = profession["base_shift_hours"]
     tax_percentage = profession["tax_percentage"]
     
-    # 3. Базовая оплата (всегда выплачивается, даже если отработано меньше)
+    # 3. Базовая оплата
     base_pay_net = profession["base_rate_net"]
     base_pay_gross = profession["base_rate_gross"]
     
-    # 4. Переработки (с прогрессивными ставками)
-    # ВАЖНО: ставки переработки указаны в нетто, но умножаем на брутто
-    overtime_hours = 0
+    # === 4. НОВАЯ ЛОГИКА: ОБЕДЫ (считаем отдельно!) ===
+    
+    meal_hours = 0
+    meal_pay_net = 0
+    meal_pay_gross = 0
+    meal_breakdown = []
+    
+    # Получаем обеды смены из БД
+    shift_meals_from_db = await get_shift_meals(shift_id)
+    
+    if shift_meals_from_db:
+        for meal in shift_meals_from_db:
+            meal_hours += meal["adds_overtime_hours"]
+            
+            # ВАЖНО: Обеды оплачиваются по БАЗОВОЙ ставке переработки!
+            meal_hour_net = profession["base_overtime_rate"]
+            meal_hour_gross = round(meal_hour_net / (1 - tax_percentage / 100))
+            
+            meal_pay_net += int(meal["adds_overtime_hours"] * meal_hour_net)
+            meal_pay_gross += int(meal["adds_overtime_hours"] * meal_hour_gross)
+            
+            meal_breakdown.append({
+                "name": meal["name"],
+                "adds_hours": meal["adds_overtime_hours"],
+                "rate_net": meal_hour_net,
+                "rate_gross": meal_hour_gross,
+                "total_net": int(meal["adds_overtime_hours"] * meal_hour_net),
+                "total_gross": int(meal["adds_overtime_hours"] * meal_hour_gross)
+            })
+    
+    # Альтернативно: если обеды ещё не сохранены, получаем из parsed_data
+    if not shift_meals_from_db and shift["parsed_data"]:
+        try:
+            parsed_data = json.loads(shift["parsed_data"])
+            mentioned_meals = parsed_data.get("meals", [])
+            
+            if mentioned_meals:
+                meal_types = await get_meal_types(profession["id"])
+                
+                for mentioned_meal in mentioned_meals:
+                    for meal_type in meal_types:
+                        meal_name_lower = meal_type["name"].lower()
+                        
+                        if (meal_name_lower in mentioned_meal.lower() or 
+                            mentioned_meal.lower() in meal_name_lower):
+                            
+                            meal_hours += meal_type["adds_overtime_hours"]
+                            
+                            # БАЗОВАЯ ставка для обедов
+                            meal_hour_net = profession["base_overtime_rate"]
+                            meal_hour_gross = round(meal_hour_net / (1 - tax_percentage / 100))
+                            
+                            meal_pay_net += int(meal_type["adds_overtime_hours"] * meal_hour_net)
+                            meal_pay_gross += int(meal_type["adds_overtime_hours"] * meal_hour_gross)
+                            
+                            meal_breakdown.append({
+                                "name": meal_type["name"],
+                                "adds_hours": meal_type["adds_overtime_hours"],
+                                "rate_net": meal_hour_net,
+                                "rate_gross": meal_hour_gross,
+                                "total_net": int(meal_type["adds_overtime_hours"] * meal_hour_net),
+                                "total_gross": int(meal_type["adds_overtime_hours"] * meal_hour_gross)
+                            })
+                            break
+        except json.JSONDecodeError:
+            pass
+    
+    # === 5. ПЕРЕРАБОТКИ (БЕЗ обедов - только фактические часы работы) ===
+    
+    base_overtime_hours = 0
     overtime_pay_net = 0
     overtime_pay_gross = 0
     overtime_breakdown = []
     
+    # Рассчитываем базовые часы переработки (БЕЗ обедов!)
     if total_hours > base_hours:
         overtime_hours_raw = total_hours - base_hours
         
-        # Применяем порог (threshold) - первые X часов не считаются
+        # Применяем порог
         overtime_threshold = profession["overtime_threshold"]
         if overtime_hours_raw < overtime_threshold:
-            overtime_hours = 0
+            base_overtime_hours = 0
         else:
-            overtime_hours = overtime_hours_raw - overtime_threshold
+            base_overtime_hours = overtime_hours_raw - overtime_threshold
             
-            # Применяем округление (rounding)
+            # Применяем округление
             overtime_rounding = profession["overtime_rounding"]
             if overtime_rounding > 0:
-                # Округляем вверх до ближайшего значения
                 import math
-                overtime_hours = math.ceil(overtime_hours / overtime_rounding) * overtime_rounding
-        
-        # Обновляем overtime_hours в смене
-        async with aiosqlite.connect(DATABASE_PATH) as db:
-            await db.execute(
-                "UPDATE shifts SET overtime_hours = ? WHERE id = ?",
-                (overtime_hours, shift_id)
-            )
-            await db.commit()
-        
-        # Получаем прогрессивные ставки
-        rates = await get_progressive_rates(profession["id"])
-        
-        if rates:
-            # Применяем прогрессивные ставки
-            remaining_hours = overtime_hours
-            
-            for rate in rates:
-                if remaining_hours <= 0:
-                    break
-                
-                # Определяем размер диапазона
-                hours_to = rate["hours_to"] if rate["hours_to"] else 999
-                bracket_size = hours_to - rate["hours_from"]
-                
-                # Сколько часов попадает в этот диапазон
-                hours_in_bracket = min(remaining_hours, bracket_size)
-                
-                # ПРАВИЛЬНЫЙ РАСЧЁТ: умножаем часы на БРУТТО ставку
-                rate_net = rate["rate"]
-                rate_gross = round(rate_net / (1 - tax_percentage / 100))
-                
-                # Считаем по брутто
-                bracket_pay_gross = round(hours_in_bracket * rate_gross)
-                # Получаем нетто обратно
-                bracket_pay_net = round(bracket_pay_gross * (1 - tax_percentage / 100))
-                
-                overtime_pay_net += bracket_pay_net
-                overtime_pay_gross += bracket_pay_gross
-                
-                # Добавляем в детальный расчёт
-                bracket_label = f"{rate['hours_from']:.0f}-{rate['hours_to'] if rate['hours_to'] else '+'}ч"
-                overtime_breakdown.append({
-                    "bracket": bracket_label,
-                    "hours": round(hours_in_bracket, 2),
-                    "rate_net": rate_net,
-                    "rate_gross": rate_gross,
-                    "total_net": bracket_pay_net,
-                    "total_gross": bracket_pay_gross
-                })
-                
-                remaining_hours -= hours_in_bracket
-        else:
-            # Если нет прогрессивных ставок - используем базовую
-            overtime_pay_net = int(overtime_hours * profession["base_overtime_rate"])
-            # ИСПРАВЛЕНО: пересчитываем в брутто
-            overtime_pay_gross = round(overtime_pay_net / (1 - tax_percentage / 100))
-            
-            overtime_breakdown.append({
-                "bracket": "базовая",
-                "hours": round(overtime_hours, 2),
-                "rate_net": profession["base_overtime_rate"],
-                "rate_gross": round(profession["base_overtime_rate"] / (1 - tax_percentage / 100)),
-                "total_net": overtime_pay_net,
-                "total_gross": overtime_pay_gross
-            })
+                base_overtime_hours = math.ceil(base_overtime_hours / overtime_rounding) * overtime_rounding
     
-    # 5. Суточные (только если установлен флаг is_expense_day)
+    # ВАЖНО: Обеды НЕ попадают в прогрессивные ставки!
+    # Прогрессивные ставки только для фактических часов переработки
+    
+    # Получаем прогрессивные ставки
+    rates = await get_progressive_rates(profession["id"])
+    
+    if rates and base_overtime_hours > 0:
+        # Применяем прогрессивные ставки ТОЛЬКО к фактической переработке
+        remaining_hours = base_overtime_hours
+        
+        for rate in rates:
+            if remaining_hours <= 0:
+                break
+            
+            hours_to = rate["hours_to"] if rate["hours_to"] else 999
+            bracket_size = hours_to - rate["hours_from"]
+            hours_in_bracket = min(remaining_hours, bracket_size)
+            
+            rate_net = rate["rate"]
+            rate_gross = round(rate_net / (1 - tax_percentage / 100))
+            
+            bracket_pay_gross = round(hours_in_bracket * rate_gross)
+            bracket_pay_net = round(bracket_pay_gross * (1 - tax_percentage / 100))
+            
+            overtime_pay_net += bracket_pay_net
+            overtime_pay_gross += bracket_pay_gross
+            
+            bracket_label = f"{rate['hours_from']:.0f}-{rate['hours_to'] if rate['hours_to'] else '+'}ч"
+            overtime_breakdown.append({
+                "bracket": bracket_label,
+                "hours": round(hours_in_bracket, 2),
+                "rate_net": rate_net,
+                "rate_gross": rate_gross,
+                "total_net": bracket_pay_net,
+                "total_gross": bracket_pay_gross
+            })
+            
+            remaining_hours -= hours_in_bracket
+    elif base_overtime_hours > 0:
+        # Если нет прогрессивных ставок - используем базовую
+        overtime_pay_net = int(base_overtime_hours * profession["base_overtime_rate"])
+        overtime_pay_gross = round(overtime_pay_net / (1 - tax_percentage / 100))
+        
+        overtime_breakdown.append({
+            "bracket": "базовая",
+            "hours": round(base_overtime_hours, 2),
+            "rate_net": profession["base_overtime_rate"],
+            "rate_gross": round(profession["base_overtime_rate"] / (1 - tax_percentage / 100)),
+            "total_net": overtime_pay_net,
+            "total_gross": overtime_pay_gross
+        })
+    
+    # ИТОГО часов переработки (для отображения)
+    total_overtime_hours = base_overtime_hours + meal_hours
+    
+    # Обновляем overtime_hours в смене
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            "UPDATE shifts SET overtime_hours = ? WHERE id = ?",
+            (total_overtime_hours, shift_id)
+        )
+        await db.commit()
+    
+    # 6. Суточные
     daily_allowance_pay = 0
     if shift["is_expense_day"]:
         daily_allowance_pay = profession["daily_allowance"]
     
-    # 6. Дополнительные услуги
-    # ВАЖНО: стоимость услуг указана в нетто, каждая услуга может иметь свой налог
+    # 7. Дополнительные услуги (БЕЗ обедов!)
     services_pay_net = 0
     services_pay_gross = 0
     services_breakdown = []
@@ -153,14 +220,11 @@ async def calculate_shift_earnings(shift_id: int, project_id: int):
             mentioned_services = parsed_data.get("services", [])
             
             if mentioned_services:
-                # Получаем все доступные услуги
                 available_services = await get_additional_services(profession["id"])
                 
-                # Ищем совпадения
                 for service in available_services:
                     service_name_lower = service["name"].lower()
                     
-                    # Проверяем, упоминается ли услуга
                     is_mentioned = any(
                         service_name_lower in mentioned.lower() or mentioned.lower() in service_name_lower
                         for mentioned in mentioned_services
@@ -168,7 +232,6 @@ async def calculate_shift_earnings(shift_id: int, project_id: int):
                     
                     if is_mentioned:
                         service_net = service["cost"]
-                        # ИСПРАВЛЕНО: каждая услуга использует свой налог!
                         service_tax = service["tax_percentage"]
                         service_gross = round(service_net / (1 - service_tax / 100))
                         
@@ -182,29 +245,32 @@ async def calculate_shift_earnings(shift_id: int, project_id: int):
                             "tax": service_tax
                         })
         except json.JSONDecodeError:
-            pass  # Если не можем распарсить - пропускаем услуги
+            pass
     
-    # 7. Итого
-    total_net = base_pay_net + overtime_pay_net + daily_allowance_pay + services_pay_net
-    total_gross = base_pay_gross + overtime_pay_gross + daily_allowance_pay + services_pay_gross
+    # 8. Итого
+    total_net = base_pay_net + overtime_pay_net + meal_pay_net + daily_allowance_pay + services_pay_net
+    total_gross = base_pay_gross + overtime_pay_gross + meal_pay_gross + daily_allowance_pay + services_pay_gross
     
-    # 8. Детали расчёта
+    # 9. Детали расчёта
     calculation_details = {
         "base_hours": base_hours,
         "total_hours": round(total_hours, 2),
-        "overtime_hours": round(overtime_hours, 2),
+        "base_overtime_hours": round(base_overtime_hours, 2),  # Переработка БЕЗ обедов
+        "meal_hours": round(meal_hours, 2),  # Часы обедов
+        "total_overtime_hours": round(total_overtime_hours, 2),  # Всего переработки
         "breakdown": {
             "base_pay": {
                 "net": base_pay_net,
                 "gross": base_pay_gross
             },
-            "overtime": overtime_breakdown,
+            "overtime": overtime_breakdown,  # Прогрессивные ставки (БЕЗ обедов)
+            "meals": meal_breakdown,  # Обеды (по базовой ставке)
             "daily_allowance": daily_allowance_pay,
             "services": services_breakdown
         }
     }
     
-    # 9. Сохраняем в таблицу earnings
+    # 10. Сохраняем в таблицу earnings
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO earnings (
@@ -214,7 +280,8 @@ async def calculate_shift_earnings(shift_id: int, project_id: int):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             shift_id, base_pay_net, base_pay_gross,
-            overtime_pay_gross, daily_allowance_pay, services_pay_gross,
+            overtime_pay_gross + meal_pay_gross,  # Сумма переработки + обеды
+            daily_allowance_pay, services_pay_gross,
             total_net, total_gross, json.dumps(calculation_details, ensure_ascii=False)
         ))
         await db.commit()
