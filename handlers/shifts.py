@@ -8,12 +8,12 @@ from datetime import datetime
 import json
 import aiosqlite
 from config import DATABASE_PATH
-from database_updated import (
+from database import (  # ИСПРАВЛЕНО!
     get_active_project, get_user, create_shift, confirm_shift,
-    get_meal_types, add_shift_meal  # НОВОЕ!
+    get_meal_types, add_shift_meal
 )
-from parser_updated import parse_shift_message  # ВАЖНО: обновлённый парсер!
-from calculator_fixed import calculate_shift_earnings  # ВАЖНО: исправленный калькулятор!
+from parser import parse_shift_message
+from calculator import calculate_shift_earnings
 
 router = Router()
 

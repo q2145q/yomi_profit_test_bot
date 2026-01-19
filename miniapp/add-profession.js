@@ -71,7 +71,7 @@ function deleteRateRange(rateId) {
 
 window.deleteRateRange = deleteRateRange;
 
-// === ОБЕДЫ (НОВОЕ!) ===
+// === ОБЕДЫ ===
 
 document.getElementById('add-meal-btn').addEventListener('click', function() {
     addMealType();
@@ -82,7 +82,7 @@ function addMealType() {
     const mealId = `meal-${mealCounter}`;
     
     const mealCard = document.createElement('div');
-    mealCard.className = 'rate-card'; // Используем тот же стиль
+    mealCard.className = 'rate-card';
     mealCard.id = mealId;
     mealCard.innerHTML = `
         <div class="rate-card-header">
@@ -154,7 +154,7 @@ tg.MainButton.onClick(async function() {
     }
     
     // Собираем прогрессивные ставки
-    const rateCards = document.querySelectorAll('.rate-card');
+    const rateCards = document.querySelectorAll('#progressive-rates-list .rate-card');
     const rates = [];
     
     rateCards.forEach((card, index) => {
@@ -173,8 +173,7 @@ tg.MainButton.onClick(async function() {
         }
     });
     
-    // === СОБИРАЕМ ОБЕДЫ (НОВОЕ!) ===
-    
+    // Собираем обеды
     const mealCards = document.querySelectorAll('#meals-list .rate-card');
     const meals = [];
     
@@ -184,7 +183,6 @@ tg.MainButton.onClick(async function() {
         const keywordsInput = card.querySelector('.meal-keywords').value.trim();
         
         if (name) {
-            // Формируем массив ключевых слов
             const keywordsArray = keywordsInput 
                 ? keywordsInput.split(',').map(k => k.trim()).filter(k => k)
                 : [name];
@@ -210,7 +208,7 @@ tg.MainButton.onClick(async function() {
             daily_allowance: dailyAllowance,
             conditions: conditions,
             progressive_rates: rates,
-            meals: meals  // НОВОЕ!
+            meals: meals
         };
         
         console.log('📤 Отправляю данные:', data);

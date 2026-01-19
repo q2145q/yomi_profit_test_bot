@@ -2,7 +2,7 @@
 Расчёт заработка по смене
 Статус: ✅ Шаг 6.1 - Обеды добавляют +1 час БАЗОВОЙ переработки
 """
-from database_updated import (
+from database import (
     get_profession_by_project, 
     get_progressive_rates, 
     get_additional_services,

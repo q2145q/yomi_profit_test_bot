@@ -2,244 +2,204 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
+// Скрываем главную кнопку (она не нужна)
+tg.MainButton.hide();
+
 // Получаем параметры из URL
 const urlParams = new URLSearchParams(window.location.search);
 const projectId = urlParams.get('project_id');
 const projectName = urlParams.get('project_name');
 const userId = urlParams.get('user_id');
 
-console.log('👤 Добавление профессии');
+console.log('📂 Детали проекта');
 console.log('Project ID:', projectId);
+console.log('Project Name:', projectName);
+
+// Устанавливаем название проекта сразу
+document.getElementById('project-title').textContent = `📋 ${projectName}`;
 
 // API endpoint - относительный путь
 const API_URL = '/api';
 
-// Настройка главной кнопки
-tg.MainButton.setText('Сохранить профессию');
-tg.MainButton.show();
+// Загружаем детали проекта
+loadProjectDetails();
 
-// Счётчики
-let rateCounter = 0;
-let mealCounter = 0;
+// === ОБРАБОТЧИКИ КНОПОК ===
 
-// === ПРОГРЕССИВНЫЕ СТАВКИ ===
-
-document.getElementById('add-rate-btn').addEventListener('click', function() {
-    addRateRange();
+document.getElementById('add-profession-btn').addEventListener('click', function() {
+    console.log('➡️ Переход на add-profession.html');
+    window.location.href = 
+        `add-profession.html?project_id=${projectId}&project_name=${encodeURIComponent(projectName)}&user_id=${userId}`;
 });
 
-function addRateRange() {
-    rateCounter++;
-    const rateId = `rate-${rateCounter}`;
-    
-    const rateCard = document.createElement('div');
-    rateCard.className = 'rate-card';
-    rateCard.id = rateId;
-    rateCard.innerHTML = `
-        <div class="rate-card-header">
-            <span class="rate-card-title">Диапазон ${rateCounter}</span>
-            <button type="button" class="delete-btn" onclick="deleteRateRange('${rateId}')">✕</button>
-        </div>
-        <div class="rate-card-body">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>От (часы)</label>
-                    <input type="number" class="rate-from" step="0.1" placeholder="0">
-                </div>
-                <div class="form-group">
-                    <label>До (часы)</label>
-                    <input type="number" class="rate-to" step="0.1" placeholder="2">
-                    <span class="hint">Пусто = бесконечность</span>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Ставка (₽/ч чистыми)</label>
-                <input type="number" class="rate-value" placeholder="500">
-            </div>
-        </div>
-    `;
-    
-    document.getElementById('progressive-rates-list').appendChild(rateCard);
-}
-
-function deleteRateRange(rateId) {
-    const element = document.getElementById(rateId);
-    if (element) {
-        element.remove();
-    }
-}
-
-window.deleteRateRange = deleteRateRange;
-
-// === ОБЕДЫ (НОВОЕ!) ===
-
-document.getElementById('add-meal-btn').addEventListener('click', function() {
-    addMealType();
+document.getElementById('add-service-btn').addEventListener('click', function() {
+    console.log('➡️ Переход на add-service.html');
+    window.location.href = 
+        `add-service.html?project_id=${projectId}&project_name=${encodeURIComponent(projectName)}&user_id=${userId}`;
 });
 
-function addMealType() {
-    mealCounter++;
-    const mealId = `meal-${mealCounter}`;
-    
-    const mealCard = document.createElement('div');
-    mealCard.className = 'rate-card'; // Используем тот же стиль
-    mealCard.id = mealId;
-    mealCard.innerHTML = `
-        <div class="rate-card-header">
-            <span class="rate-card-title">Обед ${mealCounter}</span>
-            <button type="button" class="delete-btn" onclick="deleteMealType('${mealId}')">✕</button>
-        </div>
-        <div class="rate-card-body">
-            <div class="form-group">
-                <label>Название *</label>
-                <input type="text" class="meal-name" placeholder="Например: текущий обед">
-                <span class="hint">Как это называется в вашей сфере</span>
-            </div>
-            <div class="form-group">
-                <label>Добавляет часов *</label>
-                <input type="number" class="meal-hours" value="1.0" step="0.5" min="0.5" max="3.0">
-                <span class="hint">Оплачивается по базовой ставке переработки</span>
-            </div>
-            <div class="form-group">
-                <label>Ключевые слова</label>
-                <input type="text" class="meal-keywords" placeholder="текущий обед, текущий">
-                <span class="hint">Через запятую, для AI-парсинга</span>
-            </div>
-        </div>
-    `;
-    
-    document.getElementById('meals-list').appendChild(mealCard);
-}
+document.getElementById('statistics-btn').addEventListener('click', function() {
+    console.log('➡️ Переход на statistics.html');
+    window.location.href = 
+        `statistics.html?project_id=${projectId}&project_name=${encodeURIComponent(projectName)}&user_id=${userId}`;
+});
 
-function deleteMealType(mealId) {
-    const element = document.getElementById(mealId);
-    if (element) {
-        element.remove();
-    }
-}
+// === ЗАГРУЗКА ДАННЫХ ===
 
-window.deleteMealType = deleteMealType;
-
-// === ОТПРАВКА ФОРМЫ ===
-
-tg.MainButton.onClick(async function() {
-    console.log('🔵 Сохраняю профессию...');
-    
-    // Блокируем кнопку
-    tg.MainButton.showProgress();
-    
-    // Собираем основные данные
-    const position = document.getElementById('position').value.trim();
-    const baseRate = parseInt(document.getElementById('base-rate').value) || 0;
-    const tax = parseFloat(document.getElementById('tax').value) || 13;
-    const baseHours = parseFloat(document.getElementById('base-hours').value) || 12;
-    const breakHours = parseFloat(document.getElementById('break-hours').value) || 12;
-    const overtimeThresholdMinutes = parseInt(document.getElementById('overtime-threshold').value) || 15;
-    const overtimeThresholdHours = overtimeThresholdMinutes / 60;
-    const overtimeRounding = parseFloat(document.getElementById('overtime-rounding').value);
-    const dailyAllowance = parseInt(document.getElementById('daily-allowance').value) || 0;
-    const conditions = document.getElementById('conditions').value.trim();
-    
-    // Валидация
-    if (!position) {
-        tg.MainButton.hideProgress();
-        tg.showAlert('Введите должность');
-        return;
-    }
-    
-    if (baseRate <= 0) {
-        tg.MainButton.hideProgress();
-        tg.showAlert('Введите базовую ставку');
-        return;
-    }
-    
-    // Собираем прогрессивные ставки
-    const rateCards = document.querySelectorAll('.rate-card');
-    const rates = [];
-    
-    rateCards.forEach((card, index) => {
-        const from = parseFloat(card.querySelector('.rate-from').value) || 0;
-        const toInput = card.querySelector('.rate-to').value.trim();
-        const to = toInput === '' ? null : parseFloat(toInput);
-        const rate = parseInt(card.querySelector('.rate-value').value) || 0;
-        
-        if (rate > 0) {
-            rates.push({
-                hours_from: from,
-                hours_to: to,
-                rate: rate,
-                order_num: index + 1
-            });
-        }
-    });
-    
-    // === СОБИРАЕМ ОБЕДЫ (НОВОЕ!) ===
-    
-    const mealCards = document.querySelectorAll('#meals-list .rate-card');
-    const meals = [];
-    
-    mealCards.forEach((card) => {
-        const name = card.querySelector('.meal-name').value.trim();
-        const hours = parseFloat(card.querySelector('.meal-hours').value) || 1.0;
-        const keywordsInput = card.querySelector('.meal-keywords').value.trim();
-        
-        if (name) {
-            // Формируем массив ключевых слов
-            const keywordsArray = keywordsInput 
-                ? keywordsInput.split(',').map(k => k.trim()).filter(k => k)
-                : [name];
-            
-            meals.push({
-                name: name,
-                adds_hours: hours,
-                keywords: JSON.stringify(keywordsArray)
-            });
-        }
-    });
+async function loadProjectDetails() {
+    console.log('🔄 Загружаю детали проекта...');
     
     try {
-        // Формируем данные для отправки
-        const data = {
-            position: position,
-            base_rate_net: baseRate,
-            tax_percentage: tax,
-            base_shift_hours: baseHours,
-            break_hours: breakHours,
-            overtime_threshold: overtimeThresholdHours,
-            overtime_rounding: overtimeRounding,
-            daily_allowance: dailyAllowance,
-            conditions: conditions,
-            progressive_rates: rates,
-            meals: meals  // НОВОЕ!
-        };
-        
-        console.log('📤 Отправляю данные:', data);
-        
-        // Отправляем запрос к API
-        const response = await fetch(`${API_URL}/projects/${projectId}/professions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
+        const response = await fetch(`${API_URL}/projects/${projectId}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
         
-        const result = await response.json();
-        console.log('✅ Профессия создана:', result);
+        const data = await response.json();
+        console.log('✅ Детали загружены:', data);
         
-        // Возвращаемся на страницу проекта
-        window.location.href = 
-            `project-details.html?project_id=${projectId}&project_name=${encodeURIComponent(projectName)}&user_id=${userId}`;
+        displayProfession(data.profession, data.progressive_rates);
+        displayMeals(data.meals);
+        displayServices(data.services);
         
     } catch (error) {
-        console.error('❌ Ошибка сохранения профессии:', error);
-        tg.MainButton.hideProgress();
-        tg.showAlert('Ошибка сохранения: ' + error.message);
+        console.error('❌ Ошибка загрузки деталей:', error);
+        document.getElementById('professions-list').innerHTML = 
+            '<p class="hint">❌ Ошибка загрузки</p>';
     }
-});
+}
 
-console.log('🚀 Страница добавления профессии готова');
+// === ОТОБРАЖЕНИЕ ПРОФЕССИИ ===
+
+function displayProfession(profession, rates) {
+    const container = document.getElementById('professions-list');
+    
+    if (!profession) {
+        container.innerHTML = '<p class="hint">Профессия еще не добавлена</p>';
+        return;
+    }
+    
+    // Формируем список прогрессивных ставок
+    let ratesHtml = '';
+    if (rates && rates.length > 0) {
+        ratesHtml = '<p><strong>Прогрессивные ставки переработки:</strong></p><ul>';
+        rates.forEach(rate => {
+            const to = rate.hours_to ? `${rate.hours_to}` : '+';
+            ratesHtml += `<li>${rate.hours_from}-${to}ч: ${rate.rate.toLocaleString()}₽/ч (чистыми)</li>`;
+        });
+        ratesHtml += '</ul>';
+    }
+    
+    const html = `
+        <div class="profession-card">
+            <h3>${profession.position}</h3>
+            <div class="profession-details">
+                <p><strong>Базовая ставка:</strong> ${profession.base_rate_net.toLocaleString()}₽ (чистыми) / ${profession.base_rate_gross.toLocaleString()}₽ (с налогом)</p>
+                <p><strong>Налог:</strong> ${profession.tax_percentage}%</p>
+                <p><strong>Базовая смена:</strong> ${profession.base_shift_hours}ч</p>
+                <p><strong>Разрыв между сменами:</strong> ${profession.break_hours}ч</p>
+                <p><strong>Порог переработки:</strong> ${Math.round(profession.overtime_threshold * 60)} минут</p>
+                <p><strong>Округление:</strong> по ${profession.overtime_rounding}ч</p>
+                ${profession.daily_allowance > 0 ? `<p><strong>Суточные:</strong> ${profession.daily_allowance.toLocaleString()}₽</p>` : ''}
+                ${ratesHtml}
+                ${profession.conditions ? `<p><strong>Условия:</strong> ${profession.conditions}</p>` : ''}
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// === ОТОБРАЖЕНИЕ ОБЕДОВ ===
+
+function displayMeals(meals) {
+    const container = document.getElementById('meals-list');
+    
+    // Проверяем существование контейнера
+    if (!container) {
+        console.error('❌ Контейнер meals-list не найден!');
+        return;
+    }
+    
+    // Проверяем данные
+    if (!meals || !Array.isArray(meals) || meals.length === 0) {
+        container.innerHTML = '<p class="hint">Типы обедов еще не добавлены</p>';
+        return;
+    }
+    
+    let html = '';
+    
+    meals.forEach(meal => {
+        // Парсим keywords безопасно
+        let keywordsText = '';
+        if (meal.keywords) {
+            try {
+                const keywordsArray = JSON.parse(meal.keywords);
+                keywordsText = `<p class="hint">Ключевые слова: ${keywordsArray.join(', ')}</p>`;
+            } catch (e) {
+                console.warn('Ошибка парсинга keywords:', e);
+            }
+        }
+        
+        html += `
+            <div class="service-card">
+                <h4>🍽 ${meal.name || 'Без названия'}</h4>
+                <p><strong>Добавляет часов:</strong> ${meal.adds_overtime_hours || 1.0}</p>
+                <p><strong>Оплата:</strong> По базовой ставке переработки</p>
+                ${keywordsText}
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// === ОТОБРАЖЕНИЕ УСЛУГ ===
+
+function displayServices(services) {
+    const container = document.getElementById('services-list');
+    
+    // Проверяем существование контейнера
+    if (!container) {
+        console.error('❌ Контейнер services-list не найден!');
+        return;
+    }
+    
+    // Проверяем данные
+    if (!services || !Array.isArray(services) || services.length === 0) {
+        container.innerHTML = '<p class="hint">Услуги еще не добавлены</p>';
+        return;
+    }
+    
+    let html = '';
+    
+    services.forEach(service => {
+        const grossCost = Math.round(service.cost / (1 - (service.tax_percentage || 13) / 100));
+        
+        // Парсим keywords безопасно
+        let keywordsText = '';
+        if (service.keywords) {
+            try {
+                const keywordsArray = JSON.parse(service.keywords);
+                keywordsText = `<p class="hint">Ключевые слова: ${keywordsArray.join(', ')}</p>`;
+            } catch (e) {
+                console.warn('Ошибка парсинга keywords:', e);
+            }
+        }
+        
+        html += `
+            <div class="service-card">
+                <h4>${service.name || 'Без названия'}</h4>
+                <p><strong>Стоимость:</strong> ${service.cost.toLocaleString()}₽ (чистыми) / ${grossCost.toLocaleString()}₽ (с налогом)</p>
+                <p><strong>Налог:</strong> ${service.tax_percentage || 13}%</p>
+                <p><strong>Правило:</strong> ${service.application_rule === 'on_mention' ? 'При упоминании' : 'К каждой смене'}</p>
+                ${keywordsText}
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+console.log('🚀 Страница деталей проекта готова');
